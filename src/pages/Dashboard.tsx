@@ -75,10 +75,14 @@ export function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {profile?.role === 'facilitator' ? (
               <>
-                <button className="p-4 border-2 border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-left">
+                <Link to="/simulation/create" className="p-4 border-2 border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-left block">
                   <div className="font-medium text-neutral-900 mb-1">Create Simulation</div>
                   <div className="text-sm text-neutral-600">Set up a new simulation run</div>
-                </button>
+                </Link>
+                <Link to="/scenario/edit" className="p-4 border-2 border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-left block">
+                  <div className="font-medium text-neutral-900 mb-1">Edit Scenario</div>
+                  <div className="text-sm text-neutral-600">Customize templates, clans & roles</div>
+                </Link>
                 <button className="p-4 border-2 border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-left">
                   <div className="font-medium text-neutral-900 mb-1">Manage Participants</div>
                   <div className="text-sm text-neutral-600">Assign roles and permissions</div>

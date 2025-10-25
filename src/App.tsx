@@ -4,6 +4,8 @@ import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { QuickAccess } from './pages/QuickAccess'
 import { Settings } from './pages/Settings'
+import { SimulationWizard } from './pages/SimulationWizard'
+import { EditScenario } from './pages/EditScenario'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { SystemCheck } from './components/SystemCheck'
 
@@ -114,6 +116,22 @@ function App() {
         element={
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/simulation/create"
+        element={
+          <ProtectedRoute>
+            <SimulationWizard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/scenario/edit"
+        element={
+          <ProtectedRoute>
+            <EditScenario />
           </ProtectedRoute>
         }
       />
