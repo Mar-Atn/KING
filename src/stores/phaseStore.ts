@@ -178,7 +178,10 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
     const currentIndex = getCurrentPhaseIndex()
 
     // Validation: Can only start the next phase in sequence
-    if (phase.sequence_number !== currentIndex + 1) {
+    // If no phase is active yet (currentIndex = -1), allow starting phase with sequence_number = 1
+    // Otherwise, require sequence_number = currentIndex + 1
+    const expectedSequence = currentIndex === -1 ? 1 : currentIndex + 1
+    if (phase.sequence_number !== expectedSequence) {
       throw new Error('Cannot skip phases. Must complete phases in order.')
     }
 
@@ -188,8 +191,9 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
       const startedAt = new Date().toISOString()
 
       // Check if this is the first phase being started (to update sim_runs status)
-      const isFirstPhase = allPhases.every(p =>
-        p.phase_id === phaseId || p.status === 'pending' || p.status === 'skipped'
+      // First phase = no other phases have been started/completed yet
+      const isFirstPhase = !allPhases.some(p =>
+        p.phase_id !== phaseId && (p.status === 'active' || p.status === 'completed')
       )
 
       // Update phase status
