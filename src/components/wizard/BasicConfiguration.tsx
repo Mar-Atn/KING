@@ -14,9 +14,24 @@ export function BasicConfiguration() {
     setRunName,
     setParticipantCounts,
     setLearningObjectives,
+    setVotingThresholds,
   } = useSimulationStore()
 
   const [objectiveInput, setObjectiveInput] = useState('')
+
+  // Calculate default voting thresholds (2/3 majority)
+  const defaultVote1Threshold = Math.ceil(wizard.totalParticipants * 2 / 3)
+  const defaultVote2Threshold = Math.ceil(wizard.totalParticipants * 2 / 3)
+
+  const handleVote1Change = (value: string) => {
+    const num = parseInt(value)
+    setVotingThresholds(isNaN(num) ? null : num, wizard.vote2Threshold)
+  }
+
+  const handleVote2Change = (value: string) => {
+    const num = parseInt(value)
+    setVotingThresholds(wizard.vote1Threshold, isNaN(num) ? null : num)
+  }
 
   const handleAddObjective = () => {
     if (objectiveInput.trim() && wizard.learningObjectives.length < 3) {
@@ -163,6 +178,57 @@ export function BasicConfiguration() {
           </div>
         </div>
 
+        {/* Voting Thresholds (Sacred Tradition) */}
+        <div className="bg-amber-50 rounded-lg p-6 border border-amber-200">
+          <h3 className="font-medium text-neutral-900 mb-2">⚖️ Voting Thresholds (Sacred Tradition)</h3>
+          <p className="text-sm text-neutral-600 mb-4">
+            Set the number of votes required for a candidate to be elected King.
+            Default is 2/3 majority ({defaultVote1Threshold} votes out of {wizard.totalParticipants}).
+          </p>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Vote 1 Threshold */}
+            <div>
+              <label htmlFor="vote1Threshold" className="block text-sm font-medium text-neutral-700 mb-2">
+                Vote 1 Threshold
+              </label>
+              <input
+                id="vote1Threshold"
+                type="number"
+                min="1"
+                max={wizard.totalParticipants}
+                value={wizard.vote1Threshold ?? defaultVote1Threshold}
+                onChange={(e) => handleVote1Change(e.target.value)}
+                className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder={`Default: ${defaultVote1Threshold}`}
+              />
+              <p className="mt-1 text-xs text-neutral-500">
+                Votes needed in first election round
+              </p>
+            </div>
+
+            {/* Vote 2 Threshold */}
+            <div>
+              <label htmlFor="vote2Threshold" className="block text-sm font-medium text-neutral-700 mb-2">
+                Vote 2 Threshold
+              </label>
+              <input
+                id="vote2Threshold"
+                type="number"
+                min="1"
+                max={wizard.totalParticipants}
+                value={wizard.vote2Threshold ?? defaultVote2Threshold}
+                onChange={(e) => handleVote2Change(e.target.value)}
+                className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder={`Default: ${defaultVote2Threshold}`}
+              />
+              <p className="mt-1 text-xs text-neutral-500">
+                Votes needed in second election round
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Learning Objectives (Optional) */}
         <div>
           <label className="block text-sm font-medium text-neutral-700 mb-2">
@@ -227,6 +293,12 @@ export function BasicConfiguration() {
             <li>
               <strong>Participants:</strong> {wizard.totalParticipants} total ({wizard.humanParticipants} human,{' '}
               {wizard.aiParticipants} AI)
+            </li>
+            <li>
+              <strong>Vote 1 Threshold:</strong> {wizard.vote1Threshold ?? defaultVote1Threshold} votes
+            </li>
+            <li>
+              <strong>Vote 2 Threshold:</strong> {wizard.vote2Threshold ?? defaultVote2Threshold} votes
             </li>
             <li>
               <strong>Template:</strong> {wizard.selectedTemplate?.name} {wizard.selectedTemplate?.version}

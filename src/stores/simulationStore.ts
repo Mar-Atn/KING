@@ -61,6 +61,8 @@ export interface SimulationWizardState {
   humanParticipants: number
   aiParticipants: number
   learningObjectives: string[]
+  vote1Threshold: number | null // Number of votes needed for Vote 1 (null = default 2/3)
+  vote2Threshold: number | null // Number of votes needed for Vote 2 (null = default 2/3)
 
   // Clan & Role Selection (Step 3)
   selectedClans: string[] // Clan names to include
@@ -108,6 +110,7 @@ interface SimulationStore {
   setRunName: (name: string) => void
   setParticipantCounts: (total: number, human: number, ai: number) => void
   setLearningObjectives: (objectives: string[]) => void
+  setVotingThresholds: (vote1: number | null, vote2: number | null) => void
 
   // Actions - Clan & Role Selection
   initializeRoleAssignments: () => void
@@ -138,6 +141,9 @@ interface SimulationStore {
 
   // Actions - Simulation Management
   loadSimulation: (runId: string) => Promise<void>
+  loadSimulationForEdit: (runId: string) => Promise<{ success: boolean; error?: string }>
+  updateSimulation: (runId: string) => Promise<{ success: boolean; error?: string }>
+  deleteSimulation: (runId: string) => Promise<{ success: boolean; error?: string }>
 }
 
 // Initial wizard state
@@ -149,6 +155,8 @@ const initialWizardState: SimulationWizardState = {
   humanParticipants: 15,
   aiParticipants: 3,
   learningObjectives: [],
+  vote1Threshold: null, // null means use default 2/3
+  vote2Threshold: null, // null means use default 2/3
   selectedClans: [],
   roleAssignments: [],
   phaseDurations: {},
@@ -290,6 +298,17 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
       wizard: {
         ...wizard,
         learningObjectives: objectives,
+      },
+    })
+  },
+
+  setVotingThresholds: (vote1: number | null, vote2: number | null) => {
+    const { wizard } = get()
+    set({
+      wizard: {
+        ...wizard,
+        vote1Threshold: vote1,
+        vote2Threshold: vote2,
       },
     })
   },
@@ -789,6 +808,8 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
         status: 'setup',
         facilitator_id: facilitatorId,
         learning_objectives: wizard.learningObjectives.length > 0 ? wizard.learningObjectives : null,
+        vote_1_threshold: wizard.vote1Threshold,
+        vote_2_threshold: wizard.vote2Threshold,
       }
 
       const { data, error } = await supabase
@@ -817,6 +838,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
           attitude_to_others: clan.attitude_to_others,
           if_things_go_wrong: clan.if_things_go_wrong,
           color_hex: clan.color_hex || '#8B7355',
+          emblem_url: clan.logo_url || clan.emblem_url, // Support both field names from template
         }))
 
       const { data: createdClans, error: clansError } = await supabase
@@ -856,6 +878,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
           background: templateRole?.background || '',
           character_traits: templateRole?.character_traits || '',
           interests: templateRole?.interests || '',
+          avatar_url: templateRole?.avatar_url, // Copy avatar from template
           assigned_user_id: null, // Will be assigned during role distribution
         }
       })
@@ -927,6 +950,257 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
       })
     } catch (error) {
       console.error('Error loading simulation:', error)
+    }
+  },
+
+  deleteSimulation: async (runId: string) => {
+    try {
+      const { error} = await supabase
+        .from('sim_runs')
+        .delete()
+        .eq('run_id', runId)
+
+      if (error) throw error
+
+      // Clear current simulation if it was the deleted one
+      const { currentSimulation } = get()
+      if (currentSimulation?.run_id === runId) {
+        set({ currentSimulation: null })
+      }
+
+      return { success: true }
+    } catch (error) {
+      console.error('Error deleting simulation:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete simulation',
+      }
+    }
+  },
+
+  loadSimulationForEdit: async (runId: string) => {
+    const { wizard } = get()
+    set({ wizard: { ...wizard, isLoading: true } })
+
+    try {
+      // Load simulation with all related data
+      const { data: simRun, error: simError } = await supabase
+        .from('sim_runs')
+        .select('*')
+        .eq('run_id', runId)
+        .single()
+
+      if (simError) throw simError
+
+      // Load template
+      const templateId = (simRun.config as any).template_id
+      const { data: template, error: templateError } = await supabase
+        .from('simulation_templates')
+        .select('*')
+        .eq('template_id', templateId)
+        .single()
+
+      if (templateError) throw templateError
+
+      // Load clans
+      const { data: clans, error: clansError } = await supabase
+        .from('clans')
+        .select('*')
+        .eq('run_id', runId)
+        .order('sequence_number')
+
+      if (clansError) throw clansError
+
+      // Load roles
+      const { data: roles, error: rolesError } = await supabase
+        .from('roles')
+        .select('*, clans(name)')
+        .eq('run_id', runId)
+
+      if (rolesError) throw rolesError
+
+      // Load phases
+      const { data: phases, error: phasesError } = await supabase
+        .from('phases')
+        .select('*')
+        .eq('run_id', runId)
+        .order('sequence_number')
+
+      if (phasesError) throw phasesError
+
+      // Build role assignments from loaded roles
+      const roleAssignments: RoleAssignment[] = roles.map((role: any) => ({
+        sequence: (simRun.config as any).canonical_roles.find((r: any) => r.name === role.name)?.sequence || 0,
+        name: role.name,
+        clan: role.clans.name,
+        age: role.age,
+        position: role.position,
+        isSelected: true,
+        isAI: role.participant_type === 'ai',
+      }))
+
+      // Build phase durations
+      const phaseDurations: Record<number, number> = {}
+      phases.forEach((phase: any) => {
+        phaseDurations[phase.sequence_number] = phase.default_duration_minutes
+      })
+
+      // Populate wizard state
+      set({
+        wizard: {
+          ...initialWizardState,
+          selectedTemplate: template,
+          runName: simRun.run_name,
+          totalParticipants: simRun.total_participants,
+          humanParticipants: simRun.human_participants,
+          aiParticipants: simRun.ai_participants,
+          learningObjectives: simRun.learning_objectives || [],
+          vote1Threshold: simRun.vote_1_threshold,
+          vote2Threshold: simRun.vote_2_threshold,
+          selectedClans: clans.map((c: any) => c.name),
+          roleAssignments,
+          phaseDurations,
+          isLoading: false,
+        },
+        currentSimulation: simRun,
+      })
+
+      return { success: true }
+    } catch (error) {
+      console.error('Error loading simulation for edit:', error)
+      set({
+        wizard: {
+          ...get().wizard,
+          isLoading: false,
+          errors: { load: 'Failed to load simulation' },
+        },
+      })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to load simulation',
+      }
+    }
+  },
+
+  updateSimulation: async (runId: string) => {
+    const { wizard } = get()
+
+    set({ wizard: { ...wizard, isSaving: true } })
+
+    try {
+      // Delete existing clans, roles, and phases (CASCADE will handle it)
+      await supabase.from('clans').delete().eq('run_id', runId)
+      await supabase.from('phases').delete().eq('run_id', runId)
+
+      // Update sim_run basic info
+      const { error: updateError } = await supabase
+        .from('sim_runs')
+        .update({
+          run_name: wizard.runName,
+          total_participants: wizard.totalParticipants,
+          human_participants: wizard.humanParticipants,
+          ai_participants: wizard.aiParticipants,
+          learning_objectives: wizard.learningObjectives.length > 0 ? wizard.learningObjectives : null,
+          vote_1_threshold: wizard.vote1Threshold,
+          vote_2_threshold: wizard.vote2Threshold,
+        })
+        .eq('run_id', runId)
+
+      if (updateError) throw updateError
+
+      // Re-create clans
+      const templateClans = wizard.selectedTemplate!.canonical_clans as any[]
+      const clansToCreate = templateClans
+        .filter((clan: any) => wizard.selectedClans.includes(clan.name))
+        .map((clan: any) => ({
+          run_id: runId,
+          name: clan.name,
+          sequence_number: clan.sequence || 1,
+          about: clan.about,
+          key_priorities: clan.key_priorities,
+          attitude_to_others: clan.attitude_to_others,
+          if_things_go_wrong: clan.if_things_go_wrong,
+          color_hex: clan.color_hex || '#8B7355',
+        }))
+
+      const { data: createdClans, error: clansError } = await supabase
+        .from('clans')
+        .insert(clansToCreate)
+        .select()
+
+      if (clansError) throw clansError
+
+      // Create clan ID map
+      const clanIdMap = new Map<string, string>()
+      createdClans.forEach((clan: any) => {
+        clanIdMap.set(clan.name, clan.clan_id)
+      })
+
+      // Re-create roles
+      const templateRoles = wizard.selectedTemplate!.canonical_roles as any[]
+      const selectedRoleAssignments = wizard.roleAssignments.filter(r => r.isSelected)
+
+      const rolesToCreate = selectedRoleAssignments.map((assignment: any) => {
+        const templateRole = templateRoles.find((r: any) => r.sequence === assignment.sequence)
+        const clanId = clanIdMap.get(assignment.clan)
+
+        return {
+          run_id: runId,
+          clan_id: clanId,
+          participant_type: assignment.isAI ? 'ai' : 'human',
+          name: assignment.name,
+          age: templateRole?.age || 35,
+          position: templateRole?.position || '',
+          background: templateRole?.background || '',
+          character_traits: templateRole?.character_traits || '',
+          interests: templateRole?.interests || '',
+          assigned_user_id: null,
+        }
+      })
+
+      const { error: rolesError } = await supabase
+        .from('roles')
+        .insert(rolesToCreate)
+
+      if (rolesError) throw rolesError
+
+      // Re-create phases
+      const templateStages = wizard.selectedTemplate!.process_stages as any[]
+      const phasesToCreate = templateStages.map((stage: any) => {
+        const customDuration = wizard.phaseDurations[stage.sequence]
+
+        return {
+          run_id: runId,
+          sequence_number: stage.sequence,
+          name: stage.name,
+          description: stage.description || '',
+          default_duration_minutes: customDuration ?? stage.default_duration_minutes,
+          status: 'pending',
+        }
+      })
+
+      const { error: phasesError } = await supabase
+        .from('phases')
+        .insert(phasesToCreate)
+
+      if (phasesError) throw phasesError
+
+      set({ wizard: { ...get().wizard, isSaving: false } })
+
+      return { success: true }
+    } catch (error) {
+      console.error('Error updating simulation:', error)
+      set({
+        wizard: {
+          ...get().wizard,
+          isSaving: false,
+          errors: { update: error instanceof Error ? error.message : 'Failed to update simulation' },
+        },
+      })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update simulation',
+      }
     }
   },
 }))
