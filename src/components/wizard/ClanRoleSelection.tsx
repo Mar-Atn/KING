@@ -8,8 +8,10 @@
  * - Assign which roles are AI vs Human
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
+import { ClanDetailsModal } from './ClanDetailsModal'
+import { RoleDetailsModal } from './RoleDetailsModal'
 
 export function ClanRoleSelection() {
   const {
@@ -19,6 +21,42 @@ export function ClanRoleSelection() {
     toggleRole,
     setRoleAI,
   } = useSimulationStore()
+
+  // Modal state
+  const [clanModalOpen, setClanModalOpen] = useState(false)
+  const [roleModalOpen, setRoleModalOpen] = useState(false)
+  const [selectedClanForDetails, setSelectedClanForDetails] = useState<any>(null)
+  const [selectedRoleForDetails, setSelectedRoleForDetails] = useState<any>(null)
+
+  // Handlers
+  const handleClanInfoClick = (e: React.MouseEvent, clan: any) => {
+    e.stopPropagation()
+
+    // The clan object already has all the data from template.canonical_clans
+    setSelectedClanForDetails(clan)
+    setClanModalOpen(true)
+  }
+
+  const handleRoleInfoClick = (e: React.MouseEvent, roleFromAssignments: any) => {
+    e.stopPropagation()
+
+    // Get full role details from template's canonical_roles
+    const canonicalRoles = template?.canonical_roles as any[] || []
+    const fullRoleData = canonicalRoles.find(r => r.sequence === roleFromAssignments.sequence)
+
+    // Merge assignment data with canonical data
+    const completeRole = {
+      ...fullRoleData,
+      ...roleFromAssignments,
+      // Ensure we keep canonical data for background, traits, interests
+      background: fullRoleData?.background,
+      character_traits: fullRoleData?.character_traits,
+      interests: fullRoleData?.interests,
+    }
+
+    setSelectedRoleForDetails(completeRole)
+    setRoleModalOpen(true)
+  }
 
   // Initialize role assignments when component mounts
   useEffect(() => {
@@ -110,9 +148,20 @@ export function ClanRoleSelection() {
                     onChange={() => toggleClan(clan.name)}
                     className="w-5 h-5 text-primary focus:ring-primary rounded"
                   />
-                  <div className="flex-1">
-                    <h3 className="font-medium text-neutral-900">{clan.name}</h3>
-                    <p className="text-sm text-neutral-600">{clan.description}</p>
+                  <div
+                    className="flex-1 cursor-pointer hover:bg-neutral-50 -m-2 p-2 rounded transition-colors"
+                    onClick={(e) => handleClanInfoClick(e, clan)}
+                    title="Click to view clan details"
+                  >
+                    <h3 className="font-medium text-neutral-900 flex items-center gap-2">
+                      {clan.name}
+                      <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </h3>
+                    <p className="text-sm text-neutral-600 line-clamp-2">
+                      {clan.about?.substring(0, 150)}...
+                    </p>
                   </div>
                   <div className="text-sm text-neutral-600">
                     {selectedClanRoles.length} / {clanRoles.length} roles
@@ -128,7 +177,7 @@ export function ClanRoleSelection() {
                       key={role.sequence}
                       className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
                         role.isSelected
-                          ? 'bg-neutral-50 hover:bg-neutral-100'
+                          ? 'bg-neutral-50'
                           : 'bg-white opacity-50'
                       }`}
                     >
@@ -140,13 +189,22 @@ export function ClanRoleSelection() {
                         className="w-4 h-4 text-primary focus:ring-primary rounded"
                       />
 
-                      {/* Role Information */}
-                      <div className="flex-1">
-                        <div className="font-medium text-neutral-900 text-sm">
-                          {role.name}
-                          {role.position && (
-                            <span className="ml-2 text-xs text-neutral-500">({role.position})</span>
-                          )}
+                      {/* Role Information - Clickable */}
+                      <div
+                        className="flex-1 cursor-pointer hover:bg-white -m-1 p-1 rounded transition-colors"
+                        onClick={(e) => handleRoleInfoClick(e, role)}
+                        title="Click to view character details"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-neutral-900 text-sm">
+                            {role.name}
+                            {role.position && (
+                              <span className="ml-2 text-xs text-neutral-500">({role.position})</span>
+                            )}
+                          </div>
+                          <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
                         </div>
                         {role.age && (
                           <div className="text-xs text-neutral-600">Age: {role.age}</div>
@@ -157,7 +215,10 @@ export function ClanRoleSelection() {
                       {role.isSelected && (
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setRoleAI(role.sequence, false)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setRoleAI(role.sequence, false)
+                            }}
                             className={`px-3 py-1 text-xs font-medium rounded-l-md transition-colors ${
                               !role.isAI
                                 ? 'bg-primary text-white'
@@ -167,7 +228,10 @@ export function ClanRoleSelection() {
                             Human
                           </button>
                           <button
-                            onClick={() => setRoleAI(role.sequence, true)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setRoleAI(role.sequence, true)
+                            }}
                             className={`px-3 py-1 text-xs font-medium rounded-r-md transition-colors ${
                               role.isAI
                                 ? 'bg-secondary text-white'
@@ -193,6 +257,10 @@ export function ClanRoleSelection() {
         <ul className="text-sm text-neutral-700 space-y-1">
           <li className="flex items-start gap-2">
             <span className="text-primary">•</span>
+            <span>Click on clan names or role names to view their full detailed descriptions</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-primary">•</span>
             <span>Uncheck a clan to exclude all its roles at once</span>
           </li>
           <li className="flex items-start gap-2">
@@ -209,6 +277,18 @@ export function ClanRoleSelection() {
           </li>
         </ul>
       </div>
+
+      {/* Modals */}
+      <ClanDetailsModal
+        isOpen={clanModalOpen}
+        onClose={() => setClanModalOpen(false)}
+        clan={selectedClanForDetails}
+      />
+      <RoleDetailsModal
+        isOpen={roleModalOpen}
+        onClose={() => setRoleModalOpen(false)}
+        role={selectedRoleForDetails}
+      />
     </div>
   )
 }

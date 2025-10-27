@@ -178,9 +178,18 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
     const currentIndex = getCurrentPhaseIndex()
 
     // Validation: Can only start the next phase in sequence
-    // If no phase is active yet (currentIndex = -1), allow starting phase with sequence_number = 1
-    // Otherwise, require sequence_number = currentIndex + 1
-    const expectedSequence = currentIndex === -1 ? 1 : currentIndex + 1
+    // If no phase is active yet (currentIndex = -1), allow starting the first phase (minimum sequence_number)
+    // Otherwise, require sequence_number = current phase's sequence + 1
+    let expectedSequence: number
+    if (currentIndex === -1) {
+      // No phase active yet - allow starting the first phase (find minimum sequence_number)
+      expectedSequence = Math.min(...allPhases.map(p => p.sequence_number))
+    } else {
+      // Phase active - next phase must be current sequence_number + 1
+      const currentPhase = allPhases[currentIndex]
+      expectedSequence = currentPhase.sequence_number + 1
+    }
+
     if (phase.sequence_number !== expectedSequence) {
       throw new Error('Cannot skip phases. Must complete phases in order.')
     }

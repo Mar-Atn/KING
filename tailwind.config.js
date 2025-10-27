@@ -62,8 +62,31 @@ export default {
         },
 
         // Semantic Colors
-        success: '#4A7C59',
-        warning: '#C97435',
+        success: {
+          DEFAULT: '#4A7C59',
+          50: '#F0F7F2',
+          100: '#D4E8DA',
+          600: '#4A7C59',
+          700: '#3D6649',
+        },
+        warning: {
+          DEFAULT: '#C97435',
+          50: '#FDF6F0',
+          100: '#F9E8D9',
+          200: '#F2D4B8',
+          600: '#C97435',
+          700: '#A85F2C',
+          900: '#6B3D1C',
+        },
+        danger: {
+          DEFAULT: '#B94A48',
+          50: '#FCF0F0',
+          100: '#F7D9D8',
+          200: '#F0B3B1',
+          600: '#B94A48',
+          700: '#9A3E3C',
+          900: '#6B2B2A',
+        },
         error: '#B94A48',
       },
 

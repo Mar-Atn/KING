@@ -14,6 +14,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { Database } from '../types/database'
+import { ImageUpload } from '../components/ImageUpload'
+import { ClanLogo } from '../components/ClanLogo'
+import { Avatar } from '../components/Avatar'
 
 type SimTemplate = Database['public']['Tables']['simulation_templates']['Row']
 
@@ -133,8 +136,9 @@ export function EditScenario() {
           canonical_roles: selectedTemplate.canonical_roles,
           process_stages: selectedTemplate.process_stages,
           description: selectedTemplate.description,
+          name: selectedTemplate.name,
         })
-        .eq('id', selectedTemplate.id)
+        .eq('template_id', selectedTemplate.template_id)
 
       if (error) throw error
 
@@ -527,6 +531,12 @@ export function EditScenario() {
                               className="w-full p-4 flex items-center justify-between hover:bg-neutral-50 transition-colors"
                             >
                               <div className="flex items-center gap-3">
+                                <ClanLogo
+                                  src={clan.logo_url}
+                                  alt={clan.name}
+                                  size="sm"
+                                  circular
+                                />
                                 <span className="font-medium text-neutral-900">{clan.name}</span>
                                 <span className="text-xs text-neutral-500">
                                   ({(selectedTemplate.canonical_roles as any[]).filter((r: any) => r.clan === clan.name).length} roles)
@@ -545,9 +555,25 @@ export function EditScenario() {
                             {/* Clan Details (Expanded) */}
                             {isExpanded && (
                               <div className="px-4 pb-4 space-y-4 border-t border-neutral-200">
+                                {/* Clan Logo Upload */}
+                                <div className="pt-4">
+                                  <label className="block text-sm font-medium text-neutral-900 mb-3">
+                                    Clan Logo
+                                  </label>
+                                  <ImageUpload
+                                    currentUrl={clan.logo_url}
+                                    altText={clan.name}
+                                    onUpload={(newUrl) => updateClan(clan.name, { logo_url: newUrl })}
+                                    circular={false}
+                                    size="md"
+                                    fallbackInitials={clan.name.split(' ').filter(w => w.length > 2).map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                                    label="Upload Logo"
+                                  />
+                                </div>
+
                                 {/* About */}
                                 <div>
-                                  <label className="block text-sm font-medium text-neutral-900 mb-2 mt-4">
+                                  <label className="block text-sm font-medium text-neutral-900 mb-2">
                                     About
                                   </label>
                                   <textarea
@@ -670,6 +696,11 @@ export function EditScenario() {
                               className="w-full p-3 flex items-center justify-between hover:bg-neutral-50 transition-colors"
                             >
                               <div className="flex items-center gap-3">
+                                <Avatar
+                                  src={role.avatar_url}
+                                  alt={role.name}
+                                  size="sm"
+                                />
                                 <span className="font-medium text-neutral-900">{role.name}</span>
                                 <span className="text-xs px-2 py-1 bg-neutral-100 text-neutral-600 rounded">
                                   {role.clan}
@@ -693,7 +724,23 @@ export function EditScenario() {
                             {/* Role Details (Expanded) */}
                             {isExpanded && (
                               <div className="px-3 pb-3 space-y-3 border-t border-neutral-200">
-                                <div className="grid grid-cols-2 gap-3 mt-3">
+                                {/* Role Avatar Upload */}
+                                <div className="pt-3">
+                                  <label className="block text-sm font-medium text-neutral-900 mb-3">
+                                    Character Avatar
+                                  </label>
+                                  <ImageUpload
+                                    currentUrl={role.avatar_url}
+                                    altText={role.name}
+                                    onUpload={(newUrl) => updateRole(role.sequence, { avatar_url: newUrl })}
+                                    circular={true}
+                                    size="md"
+                                    fallbackInitials={role.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                                    label="Upload Avatar"
+                                  />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
                                   {/* Name */}
                                   <div>
                                     <label className="block text-sm font-medium text-neutral-900 mb-1">

@@ -15,9 +15,9 @@
  */
 
 import { useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useSimulationStore } from '../stores/simulationStore'
+import { useSimulationStore, type WizardStep } from '../stores/simulationStore'
 import { TemplateSelection } from '../components/wizard/TemplateSelection'
 import { BasicConfiguration } from '../components/wizard/BasicConfiguration'
 import { ClanRoleSelection } from '../components/wizard/ClanRoleSelection'
@@ -28,20 +28,30 @@ import { SimulationSuccess } from '../components/wizard/SimulationSuccess'
 export function SimulationWizard() {
   const { user, profile } = useAuth()
   const navigate = useNavigate()
+  const { runId } = useParams<{ runId?: string }>()
+  const [searchParams] = useSearchParams()
+  const mode = searchParams.get('mode') || 'create' // 'create' or 'edit'
+
   const {
     wizard,
     nextStep,
     previousStep,
+    goToStep,
     resetWizard,
     loadTemplates,
     createSimulation,
+    updateSimulation,
+    loadSimulationForEdit,
   } = useSimulationStore()
 
-  // Handle creation process
-  const handleCreateSimulation = async () => {
+  // Handle creation/update process
+  const handleSaveSimulation = async () => {
     if (!user?.id) return
 
-    const result = await createSimulation(user.id)
+    const result = mode === 'edit' && runId
+      ? await updateSimulation(runId)
+      : await createSimulation(user.id)
+
     if (result.success) {
       nextStep() // Move to success screen
     }
@@ -51,6 +61,13 @@ export function SimulationWizard() {
   useEffect(() => {
     loadTemplates()
   }, [loadTemplates])
+
+  // Load simulation data when in edit mode
+  useEffect(() => {
+    if (mode === 'edit' && runId) {
+      loadSimulationForEdit(runId)
+    }
+  }, [mode, runId, loadSimulationForEdit])
 
   // Redirect if not facilitator
   useEffect(() => {
@@ -66,56 +83,72 @@ export function SimulationWizard() {
       { num: 3, label: 'Clans & Roles' },
       { num: 4, label: 'Timing' },
       { num: 5, label: 'Review' },
-      { num: 6, label: 'Create' },
+      { num: 6, label: mode === 'edit' ? 'Update' : 'Create' },
       { num: 7, label: 'Done' },
     ]
 
+    const handleStepClick = (stepNum: WizardStep) => {
+      // Only allow clicking in edit mode and not on final steps
+      if (mode === 'edit' && stepNum < 6) {
+        goToStep(stepNum)
+      }
+    }
+
     return (
       <div className="flex items-center justify-center mb-8">
-        {steps.map((step, index) => (
-          <div key={step.num} className="flex items-center">
-            {/* Step Circle */}
-            <div
-              className={`flex items-center justify-center w-10 h-10 rounded-full font-medium transition-colors ${
-                wizard.currentStep === step.num
-                  ? 'bg-primary text-white'
-                  : wizard.currentStep > step.num
-                  ? 'bg-success text-white'
-                  : 'bg-neutral-200 text-neutral-600'
-              }`}
-            >
-              {wizard.currentStep > step.num ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                step.num
+        {steps.map((step, index) => {
+          const isClickable = mode === 'edit' && step.num < 6
+          const stepNum = step.num as WizardStep
+
+          return (
+            <div key={step.num} className="flex items-center">
+              {/* Step Circle */}
+              <div
+                onClick={() => isClickable && handleStepClick(stepNum)}
+                className={`flex items-center justify-center w-10 h-10 rounded-full font-medium transition-colors ${
+                  wizard.currentStep === step.num
+                    ? 'bg-primary text-white'
+                    : wizard.currentStep > step.num
+                    ? 'bg-success text-white'
+                    : 'bg-neutral-200 text-neutral-600'
+                } ${isClickable ? 'cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-2' : ''}`}
+                title={isClickable ? `Jump to ${step.label}` : ''}
+              >
+                {wizard.currentStep > step.num ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  step.num
+                )}
+              </div>
+
+              {/* Step Label */}
+              <span
+                onClick={() => isClickable && handleStepClick(stepNum)}
+                className={`ml-2 text-sm font-medium ${
+                  wizard.currentStep === step.num
+                    ? 'text-primary'
+                    : wizard.currentStep > step.num
+                    ? 'text-success'
+                    : 'text-neutral-600'
+                } ${isClickable ? 'cursor-pointer hover:underline' : ''}`}
+                title={isClickable ? `Jump to ${step.label}` : ''}
+              >
+                {step.label}
+              </span>
+
+              {/* Connector Line */}
+              {index < steps.length - 1 && (
+                <div
+                  className={`w-12 h-0.5 mx-4 transition-colors ${
+                    wizard.currentStep > step.num ? 'bg-success' : 'bg-neutral-200'
+                  }`}
+                />
               )}
             </div>
-
-            {/* Step Label */}
-            <span
-              className={`ml-2 text-sm font-medium ${
-                wizard.currentStep === step.num
-                  ? 'text-primary'
-                  : wizard.currentStep > step.num
-                  ? 'text-success'
-                  : 'text-neutral-600'
-              }`}
-            >
-              {step.label}
-            </span>
-
-            {/* Connector Line */}
-            {index < steps.length - 1 && (
-              <div
-                className={`w-12 h-0.5 mx-4 transition-colors ${
-                  wizard.currentStep > step.num ? 'bg-success' : 'bg-neutral-200'
-                }`}
-              />
-            )}
-          </div>
-        ))}
+          )
+        })}
       </div>
     )
   }
@@ -133,19 +166,23 @@ export function SimulationWizard() {
       case 5:
         return <ReviewConfiguration />
       case 6:
-        // Creating step - show loading or confirmation
+        // Creating/Updating step - show loading or confirmation
         return (
           <div className="text-center py-12">
             {wizard.isSaving ? (
               <>
                 <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-neutral-600">Creating your simulation...</p>
+                <p className="text-neutral-600">
+                  {mode === 'edit' ? 'Updating your simulation...' : 'Creating your simulation...'}
+                </p>
               </>
             ) : (
               <>
-                <h2 className="font-heading text-2xl text-primary mb-4">Ready to Create</h2>
+                <h2 className="font-heading text-2xl text-primary mb-4">
+                  {mode === 'edit' ? 'Ready to Update' : 'Ready to Create'}
+                </h2>
                 <p className="text-neutral-600 mb-8">
-                  Click "Create Simulation" below to finalize and create your simulation.
+                  Click "{mode === 'edit' ? 'Update' : 'Create'} Simulation" below to finalize and {mode === 'edit' ? 'save your changes' : 'create your simulation'}.
                 </p>
                 {wizard.errors.create && (
                   <div className="bg-error/10 border border-error text-error px-4 py-3 rounded-lg text-sm max-w-md mx-auto">
@@ -157,7 +194,7 @@ export function SimulationWizard() {
           </div>
         )
       case 7:
-        return <SimulationSuccess />
+        return <SimulationSuccess mode={mode} />
       default:
         return null
     }
@@ -176,15 +213,22 @@ export function SimulationWizard() {
                 </svg>
               </Link>
               <div>
-                <h1 className="font-heading text-3xl text-primary">Create New Simulation</h1>
+                <h1 className="font-heading text-3xl text-primary">
+                  {mode === 'edit' ? 'Edit Simulation' : 'Create New Simulation'}
+                </h1>
                 <p className="text-sm text-neutral-600 mt-1">
-                  Configure a new simulation run for The New King SIM
+                  {mode === 'edit'
+                    ? 'Update configuration for this simulation run'
+                    : 'Configure a new simulation run for The New King SIM'}
                 </p>
               </div>
             </div>
             <button
               onClick={() => {
-                if (confirm('Cancel simulation creation? All progress will be lost.')) {
+                const message = mode === 'edit'
+                  ? 'Cancel editing? All unsaved changes will be lost.'
+                  : 'Cancel simulation creation? All progress will be lost.'
+                if (confirm(message)) {
                   resetWizard()
                   navigate('/dashboard')
                 }
@@ -217,13 +261,31 @@ export function SimulationWizard() {
             Previous
           </button>
 
-          <button
-            onClick={wizard.currentStep === 6 ? handleCreateSimulation : nextStep}
-            disabled={wizard.currentStep === 7 || wizard.isSaving}
-            className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {wizard.isSaving ? 'Creating...' : wizard.currentStep === 6 ? 'Create Simulation' : 'Next'}
-          </button>
+          <div className="flex gap-3">
+            {/* Save Changes button (Edit mode only, not on step 6 or 7) */}
+            {mode === 'edit' && wizard.currentStep < 6 && (
+              <button
+                onClick={handleSaveSimulation}
+                disabled={wizard.isSaving}
+                className="px-6 py-3 bg-secondary hover:bg-secondary-hover text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {wizard.isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            )}
+
+            {/* Next/Create button */}
+            <button
+              onClick={wizard.currentStep === 6 ? handleSaveSimulation : nextStep}
+              disabled={wizard.currentStep === 7 || wizard.isSaving}
+              className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {wizard.isSaving
+                ? mode === 'edit' ? 'Updating...' : 'Creating...'
+                : wizard.currentStep === 6
+                ? mode === 'edit' ? 'Update Simulation' : 'Create Simulation'
+                : 'Next'}
+            </button>
+          </div>
         </div>
       </main>
     </div>

@@ -1,6 +1,6 @@
 /**
  * Simulation Success Component
- * Step 5 of Simulation Creation Wizard
+ * Step 7 of Simulation Creation/Edit Wizard
  *
  * Shows success confirmation and next steps
  */
@@ -8,8 +8,13 @@
 import { Link } from 'react-router-dom'
 import { useSimulationStore } from '../../stores/simulationStore'
 
-export function SimulationSuccess() {
+interface SimulationSuccessProps {
+  mode?: 'create' | 'edit'
+}
+
+export function SimulationSuccess({ mode = 'create' }: SimulationSuccessProps) {
   const { currentSimulation } = useSimulationStore()
+  const isEditMode = mode === 'edit'
 
   return (
     <div className="text-center py-8">
@@ -21,9 +26,13 @@ export function SimulationSuccess() {
       </div>
 
       {/* Success Message */}
-      <h2 className="font-heading text-3xl text-primary mb-3">Simulation Created Successfully!</h2>
+      <h2 className="font-heading text-3xl text-primary mb-3">
+        {isEditMode ? 'Simulation Updated Successfully!' : 'Simulation Created Successfully!'}
+      </h2>
       <p className="text-neutral-600 mb-8">
-        Your simulation has been created and is ready to configure.
+        {isEditMode
+          ? 'Your simulation has been updated with the new configuration.'
+          : 'Your simulation has been created and is ready to configure.'}
       </p>
 
       {/* Simulation Details */}

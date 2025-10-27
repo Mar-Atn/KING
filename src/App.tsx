@@ -6,6 +6,8 @@ import { QuickAccess } from './pages/QuickAccess'
 import { Settings } from './pages/Settings'
 import { SimulationWizard } from './pages/SimulationWizard'
 import { EditScenario } from './pages/EditScenario'
+import { FacilitatorSimulation } from './pages/FacilitatorSimulation'
+import { PrintableMaterials } from './pages/PrintableMaterials'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { SystemCheck } from './components/SystemCheck'
 
@@ -128,10 +130,34 @@ function App() {
         }
       />
       <Route
+        path="/simulation/edit/:runId"
+        element={
+          <ProtectedRoute>
+            <SimulationWizard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/scenario/edit"
         element={
           <ProtectedRoute>
             <EditScenario />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/facilitator/simulation/:runId"
+        element={
+          <ProtectedRoute>
+            <FacilitatorSimulation />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/simulation/:runId/print"
+        element={
+          <ProtectedRoute>
+            <PrintableMaterials />
           </ProtectedRoute>
         }
       />

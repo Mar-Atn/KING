@@ -1,11 +1,18 @@
 -- ============================================================================
--- Migration: 00009_seed_kourion_template.sql
--- Description: Seed default KOURION v1.0 simulation template
--- Purpose: Load master simulation design from CSV and MD files
+-- Migration: 00012_reseed_16_phase_template.sql
+-- Description: Re-seed KOURION v1.0 template with complete 16-phase process
+-- Purpose: Update existing template to include pre-play and post-play phases
 -- ============================================================================
 -- Author: Data & Backend Architect
--- Date: 2025-10-25
+-- Date: 2025-10-26
 -- Project: The New King SIM - Political Simulation Platform
+--
+-- COMPLETE 16-PHASE PROCESS:
+--   Phase 0: Pre-Play - Role Distribution & Induction (10 min)
+--   Phases 1-12: Active Role-Play - from KING_Process.csv (120 min)
+--   Phases 13-15: Post-Play - Reflections & Debrief (55 min)
+--   Total: 185 minutes
+--
 -- Data Sources:
 --   - KING_Process.csv (12 active role-play phases)
 --   - KING_PRD.md Section 4.2 (pre/post phases)
@@ -14,7 +21,7 @@
 --   - KING_Context.md (world setting)
 -- ============================================================================
 
--- Delete any existing KOURION v1.0 templates (for re-running migration)
+-- Delete existing KOURION v1.0 template and re-insert with 16 phases
 DELETE FROM simulation_templates WHERE name = 'The New King of Kourion' AND version = 'v1.0' AND language = 'ENG';
 
 -- ============================================================================
@@ -274,8 +281,8 @@ BEGIN
     RAISE EXCEPTION 'Expected 1 template, found %', template_count;
   END IF;
 
-  IF stages_count != 12 THEN
-    RAISE EXCEPTION 'Expected 12 process stages, found %', stages_count;
+  IF stages_count != 16 THEN
+    RAISE EXCEPTION 'Expected 16 process stages, found %', stages_count;
   END IF;
 
   IF clans_count != 6 THEN

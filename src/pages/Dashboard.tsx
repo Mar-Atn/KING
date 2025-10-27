@@ -1,13 +1,134 @@
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import type { SimRun, Phase } from '../types/database'
+import { DeleteSimulationModal } from '../components/DeleteSimulationModal'
+
+// Extended type to include phase info
+type SimRunWithPhase = SimRun & {
+  current_phase?: Phase | null
+  total_phases?: number
+}
+
+// Helper function to get status label with phase information
+function getDetailedStatus(sim: SimRunWithPhase): { label: string; color: string } {
+  // If simulation completed
+  if (sim.status === 'completed') {
+    return { label: 'Completed', color: 'bg-neutral-400/20 text-neutral-600' }
+  }
+
+  // If we have an active or recent phase, show it
+  if (sim.current_phase) {
+    const phaseName = sim.current_phase.name
+    const phaseSeq = sim.current_phase.sequence_number
+    const totalPhases = sim.total_phases || '?'
+
+    // Show phase name and number
+    return {
+      label: `${phaseName} (${phaseSeq}/${totalPhases})`,
+      color: 'bg-success/20 text-success'
+    }
+  }
+
+  // No phases started yet
+  return { label: 'Not Started', color: 'bg-warning/20 text-warning' }
+}
 
 export function Dashboard() {
   const { user, profile, signOut } = useAuth()
   const navigate = useNavigate()
+  const [simulations, setSimulations] = useState<SimRunWithPhase[]>([])
+  const [loadingSimulations, setLoadingSimulations] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [selectedSimulation, setSelectedSimulation] = useState<SimRun | null>(null)
+
+  // Helper function to load simulations with phase info
+  const loadSimulationsWithPhases = async () => {
+    if (!user?.id) return
+
+    try {
+      // Get simulations
+      const { data: sims, error: simError } = await supabase
+        .from('sim_runs')
+        .select('*')
+        .eq('facilitator_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (simError) throw simError
+
+      console.log('📊 Loaded simulations:', sims?.length || 0)
+
+      // For each simulation, get current phase and total phases
+      const simsWithPhases = await Promise.all(
+        (sims || []).map(async (sim) => {
+          // Get active or most recent phase
+          const { data: phases, error: phaseError } = await supabase
+            .from('phases')
+            .select('*')
+            .eq('run_id', sim.run_id)
+            .order('sequence_number', { ascending: true })
+
+          if (phaseError) {
+            console.error(`❌ Error loading phases for ${sim.run_name}:`, phaseError)
+            return {
+              ...sim,
+              current_phase: null,
+              total_phases: 0,
+            }
+          }
+
+          const activePhase = phases?.find((p) => p.status === 'active')
+          const completedPhases = phases?.filter((p) => p.status === 'completed') || []
+          const lastCompleted = completedPhases[completedPhases.length - 1]
+
+          const currentPhase = activePhase || lastCompleted || null
+
+          console.log(`📍 ${sim.run_name}: ${phases?.length || 0} phases, current: ${currentPhase?.name || 'none'} (status: ${currentPhase?.status || 'N/A'})`)
+
+          return {
+            ...sim,
+            current_phase: currentPhase,
+            total_phases: phases?.length || 0,
+          }
+        })
+      )
+
+      setSimulations(simsWithPhases)
+    } catch (error) {
+      console.error('❌ Error fetching simulations:', error)
+    } finally {
+      setLoadingSimulations(false)
+    }
+  }
+
+  // Load user's simulations if they're a facilitator
+  useEffect(() => {
+    if (profile?.role === 'facilitator' && user?.id) {
+      setLoadingSimulations(true)
+      loadSimulationsWithPhases()
+    }
+  }, [profile?.role, user?.id])
 
   const handleSignOut = async () => {
     await signOut()
     navigate('/login')
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, sim: SimRun) => {
+    e.preventDefault() // Prevent navigation
+    e.stopPropagation()
+    setSelectedSimulation(sim)
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteSuccess = async () => {
+    // Reload simulations after deletion
+    if (profile?.role === 'facilitator' && user?.id) {
+      setLoadingSimulations(true)
+      await loadSimulationsWithPhases()
+    }
   }
 
   return (
@@ -103,14 +224,136 @@ export function Dashboard() {
           </div>
         </div>
 
+        {/* My Simulations (Facilitator Only) */}
+        {profile?.role === 'facilitator' && (
+          <div className="mt-6 bg-white rounded-lg shadow-md p-6 border-l-4 border-accent">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-heading text-xl text-primary">My Simulations</h2>
+              <Link
+                to="/simulation/create"
+                className="text-sm text-primary hover:underline"
+              >
+                + Create New
+              </Link>
+            </div>
+
+            {loadingSimulations ? (
+              <div className="text-center py-8 text-neutral-500">
+                Loading simulations...
+              </div>
+            ) : simulations.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-neutral-500 mb-4">
+                  You haven't created any simulations yet.
+                </p>
+                <Link
+                  to="/simulation/create"
+                  className="inline-block px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                >
+                  Create Your First Simulation
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {simulations.map((sim) => (
+                  <div
+                    key={sim.run_id}
+                    className="relative p-4 border-2 border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors group"
+                  >
+                    <Link
+                      to={`/facilitator/simulation/${sim.run_id}`}
+                      className="block"
+                    >
+                      {/* Reserve space for action buttons (3 buttons) */}
+                      <div className="pr-32">
+                        <div className="font-medium text-neutral-900 mb-1">
+                          {sim.run_name}
+                        </div>
+                        <div className="text-sm text-neutral-600 mb-2">
+                          {sim.version} • {sim.language} •{' '}
+                          {new Date(sim.created_at).toLocaleDateString()}
+                        </div>
+                        {/* Status badge below metadata */}
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const status = getDetailedStatus(sim)
+                            return (
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-medium ${status.color}`}
+                              >
+                                {status.label}
+                              </span>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    </Link>
+
+                    {/* Action Buttons */}
+                    <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Print Button */}
+                      <Link
+                        to={`/simulation/${sim.run_id}/print`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-2 text-secondary hover:bg-secondary/10 rounded-lg"
+                        title="Print participant materials"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                      </Link>
+
+                      {/* Edit Button */}
+                      <Link
+                        to={`/simulation/edit/${sim.run_id}?mode=edit`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-2 text-primary hover:bg-primary-light rounded-lg"
+                        title="Edit simulation"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </Link>
+
+                      {/* Delete Button */}
+                      <button
+                        onClick={(e) => handleDeleteClick(e, sim)}
+                        className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg"
+                        title="Delete simulation"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Coming Soon */}
         <div className="mt-6 bg-primary/5 border border-primary/20 rounded-lg p-6 text-center">
-          <p className="text-primary font-medium mb-2">Phase 1.3 - Authentication Complete</p>
+          <p className="text-primary font-medium mb-2">Phase 2.3 - Stage Engine Complete</p>
           <p className="text-sm text-neutral-600">
-            Next up: Phase 1.4 - Design System Components & Phase 2 - Core Simulation Engine
+            Phase management with real-time controls is now available!
           </p>
         </div>
       </main>
+
+      {/* Delete Simulation Modal */}
+      {selectedSimulation && (
+        <DeleteSimulationModal
+          isOpen={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false)
+            setSelectedSimulation(null)
+          }}
+          simulation={selectedSimulation}
+          onDeleted={handleDeleteSuccess}
+        />
+      )}
     </div>
   )
 }
