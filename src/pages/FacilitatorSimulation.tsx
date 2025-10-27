@@ -17,60 +17,88 @@ export function FacilitatorSimulation() {
   const { loadPhases, allPhases, currentPhase } = usePhaseStore()
   const { connectionStatus } = usePhaseSync(runId || null)
 
-  // ✅ OPTIMIZED: Load simulation data with PARALLEL QUERIES
-  useEffect(() => {
+  // Cancel registration - clear all role assignments
+  const handleCancelRegistration = async () => {
     if (!runId) return
 
-    const loadSimulation = async () => {
-      setLoading(true)
-      setError(null)
+    const confirmed = window.confirm(
+      'Are you sure you want to cancel the registration? This will remove all participant assignments.'
+    )
 
-      try {
-        // ✅ Execute all 3 queries in PARALLEL using Promise.all
-        const [simResult, clansResult, rolesResult] = await Promise.all([
-          // Query 1: Load sim_run
-          supabase
-            .from('sim_runs')
-            .select('*')
-            .eq('run_id', runId)
-            .single(),
+    if (!confirmed) return
 
-          // Query 2: Load clans (runs in parallel with Query 1)
-          supabase
-            .from('clans')
-            .select('*')
-            .eq('run_id', runId)
-            .order('sequence_number', { ascending: true }),
+    try {
+      // Clear all assigned_user_id for this simulation's roles
+      const { error } = await supabase
+        .from('roles')
+        .update({ assigned_user_id: null })
+        .eq('run_id', runId)
 
-          // Query 3: Load roles (runs in parallel with Query 1 & 2)
-          supabase
-            .from('roles')
-            .select('*')
-            .eq('run_id', runId),
-        ])
+      if (error) throw error
 
-        // Check for errors
-        if (simResult.error) throw simResult.error
-        if (clansResult.error) throw clansResult.error
-        if (rolesResult.error) throw rolesResult.error
-
-        // Set data immediately
-        setSimulation(simResult.data)
-        setClans(clansResult.data || [])
-        setRoles(rolesResult.data || [])
-
-        // Query 4: Load phases (can run after we have the data)
-        // This loads phases AND subscribes to real-time updates
-        await loadPhases(runId)
-
-        setLoading(false)
-      } catch (err: any) {
-        console.error('Error loading simulation:', err)
-        setError(err.message || 'Failed to load simulation')
-        setLoading(false)
-      }
+      // Reload simulation data to reflect changes
+      await loadSimulation()
+    } catch (err: any) {
+      console.error('Error canceling registration:', err)
+      setError(err.message || 'Failed to cancel registration')
     }
+  }
 
+  // Load simulation data
+  const loadSimulation = async () => {
+    if (!runId) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // ✅ Execute all 3 queries in PARALLEL using Promise.all
+      const [simResult, clansResult, rolesResult] = await Promise.all([
+        // Query 1: Load sim_run
+        supabase
+          .from('sim_runs')
+          .select('*')
+          .eq('run_id', runId)
+          .single(),
+
+        // Query 2: Load clans (runs in parallel with Query 1)
+        supabase
+          .from('clans')
+          .select('*')
+          .eq('run_id', runId)
+          .order('sequence_number', { ascending: true }),
+
+        // Query 3: Load roles (runs in parallel with Query 1 & 2)
+        supabase
+          .from('roles')
+          .select('*')
+          .eq('run_id', runId),
+      ])
+
+      // Check for errors
+      if (simResult.error) throw simResult.error
+      if (clansResult.error) throw clansResult.error
+      if (rolesResult.error) throw rolesResult.error
+
+      // Set data immediately
+      setSimulation(simResult.data)
+      setClans(clansResult.data || [])
+      setRoles(rolesResult.data || [])
+
+      // Query 4: Load phases (can run after we have the data)
+      // This loads phases AND subscribes to real-time updates
+      await loadPhases(runId)
+
+      setLoading(false)
+    } catch (err: any) {
+      console.error('Error loading simulation:', err)
+      setError(err.message || 'Failed to load simulation')
+      setLoading(false)
+    }
+  }
+
+  // ✅ OPTIMIZED: Load simulation data with PARALLEL QUERIES
+  useEffect(() => {
     loadSimulation()
   }, [runId, loadPhases])
 
@@ -104,7 +132,8 @@ export function FacilitatorSimulation() {
 
   const humanRoles = roles.filter((r) => r.participant_type === 'human')
   const aiRoles = roles.filter((r) => r.participant_type === 'ai')
-  const assignedRoles = roles.filter((r) => r.assigned_user_id !== null)
+  const assignedHumanRoles = humanRoles.filter((r) => r.assigned_user_id !== null)
+  const allHumanRolesAssigned = humanRoles.length > 0 && assignedHumanRoles.length === humanRoles.length
 
   return (
     <div className="min-h-screen bg-background">
@@ -165,6 +194,53 @@ export function FacilitatorSimulation() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Phase Controls */}
           <div className="lg:col-span-2">
+            {/* Registration Status Banner - Show when no active phase */}
+            {!currentPhase && allPhases.length > 0 && (
+              <>
+                {!allHumanRolesAssigned ? (
+                  <div className="bg-warning bg-opacity-10 border-2 border-warning rounded-lg p-6 mb-6">
+                    <h3 className="font-heading text-lg text-warning mb-3">
+                      ⚠️ No Active Phase - Registration Required
+                    </h3>
+                    <p className="text-neutral-700 mb-4">
+                      Register participants before starting the simulation.
+                    </p>
+                    <Link
+                      to={`/facilitator/simulation/${runId}/register`}
+                      className="inline-block px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-opacity-90 transition-colors"
+                    >
+                      Register Participants
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="bg-success bg-opacity-10 border-2 border-success rounded-lg p-6 mb-6">
+                    <h3 className="font-heading text-lg text-success mb-3">
+                      ✅ Registration Complete, Ready to Start
+                    </h3>
+                    <p className="text-neutral-700 mb-2">
+                      All human participants have been assigned roles. You can now start the simulation.
+                    </p>
+                    <p className="text-sm text-neutral-600 mb-4">
+                      Participants: {assignedHumanRoles.length} humans assigned, {aiRoles.length} AI participants ready
+                    </p>
+                    <button
+                      onClick={handleCancelRegistration}
+                      className="px-4 py-2 bg-white border-2 border-error text-error rounded-lg font-medium hover:bg-error hover:text-white transition-colors"
+                    >
+                      Cancel Registration
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Error Display */}
+            {error && (
+              <div className="bg-error bg-opacity-10 border border-error text-error px-4 py-3 rounded-lg mb-6">
+                {error}
+              </div>
+            )}
+
             <PhaseControls runId={runId!} />
 
             {/* Current Phase Details */}
@@ -225,33 +301,23 @@ export function FacilitatorSimulation() {
                   <span className="text-neutral-600">Total Roles:</span>
                   <span className="font-medium text-neutral-900">{roles.length}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-600">Human:</span>
+                <div className="flex justify-between items-center pt-2 border-t border-neutral-200">
+                  <span className="text-neutral-600">Human Participants:</span>
                   <span className="font-medium text-neutral-900">
                     {humanRoles.length}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-600">AI:</span>
-                  <span className="font-medium text-neutral-900">{aiRoles.length}</span>
+                <div className="flex justify-between items-center pl-4">
+                  <span className="text-neutral-600 text-sm">Out of which assigned:</span>
+                  <span className={`font-medium ${assignedHumanRoles.length === humanRoles.length ? 'text-success' : 'text-warning'}`}>
+                    {assignedHumanRoles.length}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-neutral-200">
-                  <span className="text-neutral-600">Assigned:</span>
-                  <span className="font-medium text-success">
-                    {assignedRoles.length}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-600">Unassigned:</span>
-                  <span className="font-medium text-warning">
-                    {roles.length - assignedRoles.length}
-                  </span>
+                  <span className="text-neutral-600">AI Participants:</span>
+                  <span className="font-medium text-neutral-900">{aiRoles.length}</span>
                 </div>
               </div>
-
-              <button className="mt-4 w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors">
-                Manage Participants
-              </button>
             </div>
 
             {/* Clans Summary */}

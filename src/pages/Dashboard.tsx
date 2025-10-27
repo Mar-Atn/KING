@@ -111,6 +111,57 @@ export function Dashboard() {
     }
   }
 
+  // Route participants to appropriate page based on their status
+  useEffect(() => {
+    const routeParticipant = async () => {
+      // Wait for profile to load
+      if (!user?.id || !profile || profile.role !== 'participant') {
+        console.log('⏳ Waiting for profile or user is facilitator')
+        return
+      }
+
+      console.log('🎭 Participant detected, checking role assignment...')
+
+      try {
+        // Find the role assigned to this user
+        const { data: roleData, error } = await supabase
+          .from('roles')
+          .select('run_id')
+          .eq('assigned_user_id', user.id)
+          .maybeSingle()
+
+        if (error) {
+          console.error('❌ Error fetching role:', error)
+          return
+        }
+
+        // If user has a role assignment, route based on status
+        if (roleData?.run_id) {
+          const runId = roleData.run_id
+          console.log(`✅ Found role assignment for run: ${runId}, status: ${profile.status}`)
+
+          if (profile.status === 'registered') {
+            console.log(`→ Routing to waiting room`)
+            navigate(`/waiting-room/${runId}`)
+          } else if (profile.status === 'role_assigned') {
+            console.log(`→ Routing to role reveal`)
+            navigate(`/role-reveal/${runId}`)
+          } else if (profile.status === 'active') {
+            console.log(`→ Routing to participant dashboard`)
+            navigate(`/participant-dashboard/${runId}`)
+          }
+        } else {
+          // User is a participant but not assigned to any simulation yet
+          console.log('ℹ️ Participant not assigned to any simulation yet - staying on dashboard')
+        }
+      } catch (err) {
+        console.error('❌ Exception routing participant:', err)
+      }
+    }
+
+    routeParticipant()
+  }, [user?.id, profile, navigate])
+
   // Load user's simulations if they're a facilitator
   useEffect(() => {
     if (profile?.role === 'facilitator' && user?.id) {
@@ -212,10 +263,10 @@ export function Dashboard() {
                   <div className="font-medium text-neutral-900 mb-1">Edit Scenario</div>
                   <div className="text-sm text-neutral-600">Customize templates, clans & roles</div>
                 </Link>
-                <button className="p-4 border-2 border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-left">
-                  <div className="font-medium text-neutral-900 mb-1">Manage Participants</div>
-                  <div className="text-sm text-neutral-600">Assign roles and permissions</div>
-                </button>
+                <div className="p-4 border-2 border-neutral-200 rounded-lg bg-neutral-50 text-left opacity-60">
+                  <div className="font-medium text-neutral-700 mb-1">Manage Participants</div>
+                  <div className="text-sm text-neutral-500">Open a simulation to manage participants →</div>
+                </div>
               </>
             ) : (
               <>

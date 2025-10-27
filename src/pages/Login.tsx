@@ -16,17 +16,22 @@ export function Login() {
     setError('')
     setLoading(true)
 
+    console.log('🔐 Starting login for:', email)
+
     try {
       const { error } = await signIn(email, password)
 
       if (error) {
+        console.error('🔐 Auth error:', error)
         setError(error.message)
       } else {
+        console.log('✅ Login successful, navigating...')
         // Redirect to dashboard
         navigate('/dashboard')
       }
-    } catch (err) {
-      setError('An unexpected error occurred')
+    } catch (err: any) {
+      console.error('❌ Login exception:', err)
+      setError(err.message || 'An unexpected error occurred')
     } finally {
       setLoading(false)
     }

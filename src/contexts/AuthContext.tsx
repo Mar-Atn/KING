@@ -34,48 +34,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Fetch user profile from our users table
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle() // Use maybeSingle() instead of single() to handle 0 rows gracefully
+    console.log('🔍 fetchProfile: Starting for userId:', userId)
 
-    if (error) {
-      console.error('Error fetching profile:', error)
+    try {
+      // Add 5-second timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Profile query timeout')), 5000)
+      })
+
+      const queryPromise = supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+
+      console.log('🔍 fetchProfile: Query created, waiting...')
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any
+
+      console.log('🔍 fetchProfile: Query returned', { hasData: !!data, error: error?.message })
+
+      if (error) {
+        console.error('Error fetching profile:', error)
+        return null
+      }
+
+      // If profile doesn't exist, create it from auth metadata
+      if (!data) {
+        console.log('Profile not found, creating from auth metadata...')
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (user?.user_metadata) {
+          // Use upsert to avoid duplicate key errors
+          const { data: newProfile, error: createError } = await supabase
+            .from('users')
+            .upsert({
+              id: userId,
+              email: user.email!,
+              display_name: user.user_metadata.display_name || user.email?.split('@')[0] || 'User',
+              role: user.user_metadata.role || 'participant',
+              status: 'registered',
+            }, {
+              onConflict: 'id'
+            })
+            .select()
+            .single()
+
+          if (createError) {
+            console.error('Error creating profile:', createError)
+            return null
+          }
+
+          return newProfile
+        }
+      }
+
+      return data
+    } catch (err: any) {
+      console.error('❌ fetchProfile exception:', err.message)
       return null
     }
-
-    // If profile doesn't exist, create it from auth metadata
-    if (!data) {
-      console.log('Profile not found, creating from auth metadata...')
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (user?.user_metadata) {
-        // Use upsert to avoid duplicate key errors
-        const { data: newProfile, error: createError } = await supabase
-          .from('users')
-          .upsert({
-            id: userId,
-            email: user.email!,
-            display_name: user.user_metadata.display_name || user.email?.split('@')[0] || 'User',
-            role: user.user_metadata.role || 'participant',
-            status: 'registered',
-          }, {
-            onConflict: 'id'
-          })
-          .select()
-          .single()
-
-        if (createError) {
-          console.error('Error creating profile:', createError)
-          return null
-        }
-
-        return newProfile
-      }
-    }
-
-    return data
   }
 
   // Initialize auth state
@@ -95,13 +113,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔐 Auth state changed:', event, session?.user?.email)
       setSession(session)
       setUser(session?.user ?? null)
 
       if (session?.user) {
-        const profile = await fetchProfile(session.user.id)
-        setProfile(profile)
+        console.log('🔐 Fetching profile for:', session.user.id)
+        try {
+          const profile = await fetchProfile(session.user.id)
+          console.log('🔐 Profile fetched:', profile?.role)
+          setProfile(profile)
+        } catch (err) {
+          console.error('❌ Error in fetchProfile:', err)
+          setProfile(null)
+        }
       } else {
         setProfile(null)
       }
@@ -154,20 +180,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sign in with email/password
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    console.log('🔐 Attempting sign in for:', email)
 
-    if (!error) {
-      // Update last_login_at
-      await supabase
-        .from('users')
-        .update({ last_login_at: new Date().toISOString() })
-        .eq('email', email)
+    try {
+      // Add timeout wrapper
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Authentication timeout after 10 seconds'))
+        }, 10000)
+      })
+
+      console.log('🔐 Calling supabase.auth.signInWithPassword...')
+
+      const authPromise = supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      const { error, data } = await Promise.race([authPromise, timeoutPromise]) as any
+
+      console.log('🔐 Sign in response:', { error: error?.message, hasSession: !!data?.session })
+
+      if (!error && data?.session) {
+        console.log('✅ Sign in successful, skipping last_login_at update to avoid RLS issues')
+        // Skip last_login_at update for now - it might be causing issues
+      }
+
+      return { error }
+    } catch (err) {
+      console.error('❌ Sign in exception:', err)
+      return { error: err as AuthError }
     }
-
-    return { error }
   }
 
   // Sign in with access token (QR code flow)

@@ -8,6 +8,11 @@ import { SimulationWizard } from './pages/SimulationWizard'
 import { EditScenario } from './pages/EditScenario'
 import { FacilitatorSimulation } from './pages/FacilitatorSimulation'
 import { PrintableMaterials } from './pages/PrintableMaterials'
+import { WaitingRoom } from './pages/WaitingRoom'
+import { RoleReveal } from './pages/RoleReveal'
+import { RoleBriefing } from './pages/RoleBriefing'
+import { ParticipantDashboard } from './pages/ParticipantDashboard'
+import { ParticipantRegistration } from './pages/ParticipantRegistration'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { SystemCheck } from './components/SystemCheck'
 
@@ -154,7 +159,55 @@ function App() {
         }
       />
       <Route
+        path="/facilitator/simulation/:runId/register"
+        element={
+          <ProtectedRoute>
+            <ParticipantRegistration />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/simulation/:runId/print"
+        element={
+          <ProtectedRoute>
+            <PrintableMaterials />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/waiting-room/:runId"
+        element={
+          <ProtectedRoute>
+            <WaitingRoom />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/role-reveal/:runId"
+        element={
+          <ProtectedRoute>
+            <RoleReveal />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/role-briefing/:runId"
+        element={
+          <ProtectedRoute>
+            <RoleBriefing />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/participant-dashboard/:runId"
+        element={
+          <ProtectedRoute>
+            <ParticipantDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/printable-materials/:runId/:roleId"
         element={
           <ProtectedRoute>
             <PrintableMaterials />
