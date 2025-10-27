@@ -28,6 +28,25 @@ export function WaitingRoom() {
 
     const loadData = async () => {
       try {
+        // Check if current user already has a role assigned
+        const { data: myRole, error: myRoleError } = await supabase
+          .from('roles')
+          .select('*')
+          .eq('run_id', runId)
+          .eq('assigned_user_id', user.id)
+          .maybeSingle()
+
+        if (myRoleError) {
+          console.error('Error checking role:', myRoleError)
+        }
+
+        // If user already has role assigned, navigate to role reveal
+        if (myRole && myRole.assigned_user_id === user.id) {
+          console.log('🎭 Role already assigned! Redirecting to reveal...')
+          navigate(`/role-reveal/${runId}`)
+          return
+        }
+
         // Get simulation info
         const { data: simResult, error: simError } = await supabase
           .from('sim_runs')

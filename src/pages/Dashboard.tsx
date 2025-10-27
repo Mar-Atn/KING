@@ -114,45 +114,68 @@ export function Dashboard() {
   // Route participants to appropriate page based on their status
   useEffect(() => {
     const routeParticipant = async () => {
-      // Wait for profile to load
-      if (!user?.id || !profile || profile.role !== 'participant') {
-        console.log('⏳ Waiting for profile or user is facilitator')
+      if (!user?.id) {
         return
       }
 
-      console.log('🎭 Participant detected, checking role assignment...')
-
       try {
-        // Find the role assigned to this user
-        const { data: roleData, error } = await supabase
+        // Check if user has a role assignment (determines if they're a participant in a simulation)
+        const { data: roleData, error: roleError } = await supabase
           .from('roles')
           .select('run_id')
           .eq('assigned_user_id', user.id)
           .maybeSingle()
 
-        if (error) {
-          console.error('❌ Error fetching role:', error)
+        if (roleError) {
+          console.error('❌ Error fetching role:', roleError)
           return
         }
 
-        // If user has a role assignment, route based on status
-        if (roleData?.run_id) {
-          const runId = roleData.run_id
-          console.log(`✅ Found role assignment for run: ${runId}, status: ${profile.status}`)
+        // If no role assignment, check if user is a participant
+        if (!roleData?.run_id) {
+          // Query users table directly to check role (don't depend on profile context)
+          const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle()
 
-          if (profile.status === 'registered') {
-            console.log(`→ Routing to waiting room`)
-            navigate(`/waiting-room/${runId}`)
-          } else if (profile.status === 'role_assigned') {
-            console.log(`→ Routing to role reveal`)
-            navigate(`/role-reveal/${runId}`)
-          } else if (profile.status === 'active') {
-            console.log(`→ Routing to participant dashboard`)
-            navigate(`/participant-dashboard/${runId}`)
+          if (userData?.role === 'participant') {
+            console.log('ℹ️ Participant not assigned to any simulation yet - staying on dashboard')
           }
-        } else {
-          // User is a participant but not assigned to any simulation yet
-          console.log('ℹ️ Participant not assigned to any simulation yet - staying on dashboard')
+          // If facilitator or no role data, stay on dashboard (will show facilitator UI or empty state)
+          return
+        }
+
+        // User has a role assignment - they're a participant in a simulation
+        console.log('🎭 Participant detected, checking role assignment...')
+        const runId = roleData.run_id
+
+        // Get user status directly from users table (don't rely on profile context)
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('status')
+          .eq('id', user.id)
+          .single()
+
+        if (userError) {
+          console.error('❌ Error fetching user status:', userError)
+          return
+        }
+
+        const status = userData.status
+        console.log(`✅ Found role assignment for run: ${runId}, status: ${status}`)
+
+        // Route based on status
+        if (status === 'registered') {
+          console.log(`→ Routing to waiting room`)
+          navigate(`/waiting-room/${runId}`)
+        } else if (status === 'role_assigned') {
+          console.log(`→ Routing to role reveal`)
+          navigate(`/role-reveal/${runId}`)
+        } else if (status === 'active') {
+          console.log(`→ Routing to participant dashboard`)
+          navigate(`/participant-dashboard/${runId}`)
         }
       } catch (err) {
         console.error('❌ Exception routing participant:', err)
@@ -160,7 +183,7 @@ export function Dashboard() {
     }
 
     routeParticipant()
-  }, [user?.id, profile, navigate])
+  }, [user?.id, navigate])
 
   // Load user's simulations if they're a facilitator
   useEffect(() => {
