@@ -4,7 +4,7 @@
 
 ---
 
-## ✅ Fixed Policies (16 policies - Critical Path)
+## ✅ Fixed Policies (20 policies - All Active Features)
 
 ### **sim_runs** (Migrations 00031, 00032)
 - ✅ INSERT - Facilitators can create sim runs
@@ -25,11 +25,17 @@
 - ✅ UPDATE - Facilitators update phases
 - ✅ DELETE - Facilitators delete phases
 
+### **simulation_templates** (Migration 00034) ⭐ NEW
+- ✅ INSERT - Facilitators insert templates
+- ✅ UPDATE - Facilitators update templates
+- ✅ DELETE - Facilitators delete templates
+- ✅ SELECT - View templates (all users see active, facilitators see all)
+
 **Status:** All currently-used features work correctly ✅
 
 ---
 
-## ⚠️ Remaining Policies (40 policies - Fix When Implementing Features)
+## ⚠️ Remaining Policies (36 policies - Fix When Implementing Features)
 
 These policies use `is_facilitator()` which is broken, but they're for features not yet implemented.
 **Strategy:** Fix each group when implementing the corresponding feature.
@@ -205,20 +211,6 @@ These policies use `is_facilitator()` which is broken, but they're for features 
 
 ---
 
-### **simulation_templates** (4 policies) - Already Working (Phase 2.2)
-**When to Fix:** NEXT (This is actively used!)
-**Priority:** HIGH - Used in template management
-
-| Policy Name | Action | Current Issue |
-|------------|--------|---------------|
-| Facilitators insert templates | INSERT | Uses is_facilitator() |
-| Facilitators update templates | UPDATE | Uses is_facilitator() |
-| Facilitators delete templates | DELETE | Uses is_facilitator() |
-| View templates | SELECT | Uses is_facilitator() |
-
-**Migration:** Create `00034_fix_simulation_templates_rls.sql` ASAP
-
----
 
 ### **access_tokens** (1 policy) - Phase 1: Authentication (Working)
 **When to Fix:** Low priority (only UPDATE affected, feature works)
@@ -246,8 +238,8 @@ These policies use `is_facilitator()` which is broken, but they're for features 
 
 ## 📋 Fix Priority Order
 
-### **Immediate (Before Next Feature Work):**
-1. **simulation_templates** - Used in template management (EditScenario page)
+### **✅ Completed:**
+1. ~~**simulation_templates**~~ - Fixed in migration 00034
 
 ### **Phase 4 - Participant Experience:**
 2. **public_speeches** - When implementing speech system
@@ -299,8 +291,7 @@ EXISTS (
 
 | Status | Count | Tables |
 |--------|-------|--------|
-| ✅ Fixed | 16 policies | sim_runs, clans, roles, phases |
-| 🔥 HIGH PRIORITY | 4 policies | simulation_templates |
+| ✅ Fixed | 20 policies | sim_runs, clans, roles, phases, simulation_templates |
 | ⚠️ FIX WITH FEATURE | 36 policies | 11 tables (meetings, votes, AI, etc.) |
 | **Total** | **56 policies** | **16 tables** |
 
@@ -311,7 +302,7 @@ EXISTS (
 - [x] All critical path policies fixed (sim_runs, clans, roles, phases)
 - [x] Currently-used features work correctly
 - [x] Tracking document created
-- [ ] simulation_templates policies fixed (NEXT)
+- [x] simulation_templates policies fixed ⭐ COMPLETE
 - [ ] Remaining policies fixed incrementally as features implemented
 
 ---
