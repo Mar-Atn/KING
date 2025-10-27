@@ -60,37 +60,45 @@ export function Dashboard() {
 
       console.log('📊 Loaded simulations:', sims?.length || 0)
 
-      // For each simulation, get current phase and total phases
+      // For each simulation, get current phase (active or last completed) and phase count
       const simsWithPhases = await Promise.all(
         (sims || []).map(async (sim) => {
-          // Get active or most recent phase
-          const { data: phases, error: phaseError } = await supabase
+          // Get active phase (if any)
+          const { data: activePhase } = await supabase
             .from('phases')
             .select('*')
             .eq('run_id', sim.run_id)
-            .order('sequence_number', { ascending: true })
+            .eq('status', 'active')
+            .single()
 
-          if (phaseError) {
-            console.error(`❌ Error loading phases for ${sim.run_name}:`, phaseError)
-            return {
-              ...sim,
-              current_phase: null,
-              total_phases: 0,
-            }
+          let currentPhase = activePhase
+
+          // If no active phase, get last completed phase
+          if (!currentPhase) {
+            const { data: lastCompleted } = await supabase
+              .from('phases')
+              .select('*')
+              .eq('run_id', sim.run_id)
+              .eq('status', 'completed')
+              .order('sequence_number', { ascending: false })
+              .limit(1)
+              .single()
+
+            currentPhase = lastCompleted
           }
 
-          const activePhase = phases?.find((p) => p.status === 'active')
-          const completedPhases = phases?.filter((p) => p.status === 'completed') || []
-          const lastCompleted = completedPhases[completedPhases.length - 1]
+          // Get total phase count (cached query, should be fast)
+          const { count } = await supabase
+            .from('phases')
+            .select('*', { count: 'exact', head: true })
+            .eq('run_id', sim.run_id)
 
-          const currentPhase = activePhase || lastCompleted || null
-
-          console.log(`📍 ${sim.run_name}: ${phases?.length || 0} phases, current: ${currentPhase?.name || 'none'} (status: ${currentPhase?.status || 'N/A'})`)
+          console.log(`📍 ${sim.run_name}: ${count || 0} phases, current: ${currentPhase?.name || 'none'} (status: ${currentPhase?.status || 'N/A'})`)
 
           return {
             ...sim,
             current_phase: currentPhase,
-            total_phases: phases?.length || 0,
+            total_phases: count || 0,
           }
         })
       )
