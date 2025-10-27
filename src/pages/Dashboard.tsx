@@ -69,7 +69,7 @@ export function Dashboard() {
             .select('*')
             .eq('run_id', sim.run_id)
             .eq('status', 'active')
-            .single()
+            .maybeSingle()
 
           let currentPhase = activePhase
 
@@ -82,7 +82,7 @@ export function Dashboard() {
               .eq('status', 'completed')
               .order('sequence_number', { ascending: false })
               .limit(1)
-              .single()
+              .maybeSingle()
 
             currentPhase = lastCompleted
           }

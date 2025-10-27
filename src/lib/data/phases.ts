@@ -50,12 +50,9 @@ export async function getPhaseBySequence(runId: string, sequenceNumber: number):
     .select('*')
     .eq('run_id', runId)
     .eq('sequence_number', sequenceNumber)
-    .single()
+    .maybeSingle()
 
-  if (error) {
-    if (error.code === 'PGRST116') return null // Not found
-    throw new Error(`Failed to fetch phase by sequence: ${error.message}`)
-  }
+  if (error) throw new Error(`Failed to fetch phase by sequence: ${error.message}`)
   return data
 }
 
@@ -68,12 +65,9 @@ export async function getActivePhase(runId: string): Promise<Phase | null> {
     .select('*')
     .eq('run_id', runId)
     .eq('status', 'active')
-    .single()
+    .maybeSingle()
 
-  if (error) {
-    if (error.code === 'PGRST116') return null // No active phase
-    throw new Error(`Failed to fetch active phase: ${error.message}`)
-  }
+  if (error) throw new Error(`Failed to fetch active phase: ${error.message}`)
   return data
 }
 
@@ -88,12 +82,10 @@ export async function getLastCompletedPhase(runId: string): Promise<Phase | null
     .eq('status', 'completed')
     .order('sequence_number', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
-  if (error) {
-    if (error.code === 'PGRST116') return null // No completed phases
-    throw new Error(`Failed to fetch last completed phase: ${error.message}`)
-  }
+  if (error) throw new Error(`Failed to fetch last completed phase: ${error.message}`)
+
   return data
 }
 
