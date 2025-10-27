@@ -10,24 +10,26 @@
  */
 
 import { useState } from 'react'
-import { useSimulationStore } from '../../stores/simulationStore'
+import { useSimulationStore } from "../../stores/simulationStore";
+import { useRoleSelectionStore } from "../../stores/roleSelectionStore"
 
 export function ClanCustomization() {
+  const { config } = useSimulationStore()
   const {
-    wizard,
+    roleSelection,
     updateClanCustomization,
     resetClanCustomizations,
-  } = useSimulationStore()
+  } = useRoleSelectionStore()
 
-  const template = wizard.selectedTemplate
+  const template = config.selectedTemplate
   const clans = (template?.canonical_clans as any[]) || []
-  const selectedClans = wizard.selectedClans
+  const selectedClans = roleSelection.selectedClans
 
   const [expandedClan, setExpandedClan] = useState<string | null>(selectedClans[0] || null)
 
   const getClanData = (clanName: string) => {
     const templateClan = clans.find((c: any) => c.name === clanName)
-    const customization = wizard.clanCustomizations[clanName]
+    const customization = roleSelection.clanCustomizations[clanName]
 
     return {
       name: clanName,
@@ -38,7 +40,7 @@ export function ClanCustomization() {
     }
   }
 
-  const hasCustomizations = Object.keys(wizard.clanCustomizations).length > 0
+  const hasCustomizations = Object.keys(roleSelection.clanCustomizations).length > 0
 
   return (
     <div>
@@ -66,7 +68,7 @@ export function ClanCustomization() {
           {selectedClans.map((clanName) => {
             const clanData = getClanData(clanName)
             const isExpanded = expandedClan === clanName
-            const isCustomized = !!wizard.clanCustomizations[clanName]
+            const isCustomized = !!roleSelection.clanCustomizations[clanName]
 
             return (
               <div

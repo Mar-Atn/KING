@@ -6,24 +6,26 @@
  */
 
 import { useSimulationStore } from '../../stores/simulationStore'
+import { useRoleSelectionStore } from '../../stores/roleSelectionStore'
 import { getTotalDuration } from '../../lib/processDefinition'
 
 export function ReviewConfiguration() {
-  const { wizard } = useSimulationStore()
+  const { config } = useSimulationStore()
+  const { roleSelection, getSelectedRoles, getAIRoles, getHumanRoles } = useRoleSelectionStore()
 
-  const template = wizard.selectedTemplate
+  const template = config.selectedTemplate
   const stages = template?.process_stages as any[] || []
   const clans = template?.canonical_clans as any[] || []
 
   // Calculate customization stats
-  const selectedRoles = wizard.roleAssignments.filter(r => r.isSelected)
-  const aiRoles = selectedRoles.filter(r => r.isAI)
-  const humanRoles = selectedRoles.filter(r => !r.isAI)
-  const hasTimingCustomizations = Object.keys(wizard.phaseDurations).length > 0
+  const selectedRoles = getSelectedRoles()
+  const aiRoles = getAIRoles()
+  const humanRoles = getHumanRoles()
+  const hasTimingCustomizations = Object.keys(roleSelection.phaseDurations).length > 0
 
   // Calculate total duration with customizations
   const totalDuration = stages.reduce((sum, stage: any) => {
-    const customDuration = wizard.phaseDurations[stage.sequence]
+    const customDuration = roleSelection.phaseDurations[stage.sequence]
     return sum + (customDuration ?? stage.default_duration_minutes)
   }, 0)
 
@@ -41,7 +43,7 @@ export function ReviewConfiguration() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="text-sm text-neutral-600">Simulation Name:</span>
-              <p className="font-medium text-neutral-900">{wizard.runName}</p>
+              <p className="font-medium text-neutral-900">{config.runName}</p>
             </div>
             <div>
               <span className="text-sm text-neutral-600">Template:</span>
@@ -80,10 +82,10 @@ export function ReviewConfiguration() {
         {/* Selected Clans & Roles */}
         <div className="bg-neutral-50 rounded-lg p-6 border border-neutral-200">
           <h3 className="font-medium text-neutral-900 mb-4">
-            Selected Clans ({wizard.selectedClans.length} of {clans.length})
+            Selected Clans ({roleSelection.selectedClans.length} of {clans.length})
           </h3>
           <div className="space-y-3">
-            {wizard.selectedClans.map((clanName: string) => {
+            {roleSelection.selectedClans.map((clanName: string) => {
               const clanRoles = selectedRoles.filter(r => r.clan === clanName)
               const clanAIRoles = clanRoles.filter(r => r.isAI)
 
@@ -141,7 +143,7 @@ export function ReviewConfiguration() {
           {hasTimingCustomizations ? (
             <div className="text-sm text-neutral-700 space-y-1">
               {stages.map((stage: any) => {
-                const customDuration = wizard.phaseDurations[stage.sequence]
+                const customDuration = roleSelection.phaseDurations[stage.sequence]
                 const isModified = customDuration !== undefined
 
                 return (
@@ -173,11 +175,11 @@ export function ReviewConfiguration() {
         </div>
 
         {/* Learning Objectives */}
-        {wizard.learningObjectives.length > 0 && (
+        {config.learningObjectives.length > 0 && (
           <div className="bg-neutral-50 rounded-lg p-6 border border-neutral-200">
             <h3 className="font-medium text-neutral-900 mb-4">Learning Objectives</h3>
             <ul className="space-y-2">
-              {wizard.learningObjectives.map((objective, index) => (
+              {config.learningObjectives.map((objective, index) => (
                 <li key={index} className="flex items-start gap-2">
                   <span className="text-primary font-medium">{index + 1}.</span>
                   <span className="text-neutral-700">{objective}</span>

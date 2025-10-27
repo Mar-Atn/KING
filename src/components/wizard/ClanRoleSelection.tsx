@@ -10,17 +10,19 @@
 
 import { useEffect, useState } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
+import { useRoleSelectionStore } from '../../stores/roleSelectionStore'
 import { ClanDetailsModal } from './ClanDetailsModal'
 import { RoleDetailsModal } from './RoleDetailsModal'
 
 export function ClanRoleSelection() {
+  const { config } = useSimulationStore()
   const {
-    wizard,
+    roleSelection,
     initializeRoleAssignments,
     toggleClan,
     toggleRole,
     setRoleAI,
-  } = useSimulationStore()
+  } = useRoleSelectionStore()
 
   // Modal state
   const [clanModalOpen, setClanModalOpen] = useState(false)
@@ -60,25 +62,25 @@ export function ClanRoleSelection() {
 
   // Initialize role assignments when component mounts
   useEffect(() => {
-    if (wizard.roleAssignments.length === 0) {
-      initializeRoleAssignments()
+    if (roleSelection.roleAssignments.length === 0 && config.selectedTemplate) {
+      initializeRoleAssignments(config.selectedTemplate, config.totalParticipants, config.aiParticipants)
     }
-  }, [wizard.roleAssignments.length, initializeRoleAssignments])
+  }, [roleSelection.roleAssignments.length, config.selectedTemplate, config.totalParticipants, config.aiParticipants, initializeRoleAssignments])
 
-  const template = wizard.selectedTemplate
+  const template = config.selectedTemplate
   const clans = template?.canonical_clans as any[] || []
 
   // Calculate statistics
-  const selectedClansCount = wizard.selectedClans.length
-  const selectedRoles = wizard.roleAssignments.filter(r => r.isSelected)
+  const selectedClansCount = roleSelection.selectedClans.length
+  const selectedRoles = roleSelection.roleAssignments.filter(r => r.isSelected)
   const selectedRolesCount = selectedRoles.length
   const aiRolesCount = selectedRoles.filter(r => r.isAI).length
   const humanRolesCount = selectedRolesCount - aiRolesCount
 
   // Validate counts
-  const hasError = selectedRolesCount !== wizard.totalParticipants
-  const aiMismatch = aiRolesCount !== wizard.aiParticipants
-  const humanMismatch = humanRolesCount !== wizard.humanParticipants
+  const hasError = selectedRolesCount !== config.totalParticipants
+  const aiMismatch = aiRolesCount !== config.aiParticipants
+  const humanMismatch = humanRolesCount !== config.humanParticipants
 
   return (
     <div>
@@ -98,7 +100,7 @@ export function ClanRoleSelection() {
           </div>
           <div>
             <div className={`text-2xl font-bold ${hasError ? 'text-error' : 'text-success'}`}>
-              {selectedRolesCount} / {wizard.totalParticipants}
+              {selectedRolesCount} / {config.totalParticipants}
             </div>
             <div className="text-xs text-neutral-600">Roles Selected</div>
           </div>
@@ -113,12 +115,12 @@ export function ClanRoleSelection() {
         {/* Validation Messages */}
         {hasError && (
           <div className="mt-4 text-sm text-error text-center">
-            You must select exactly {wizard.totalParticipants} roles to match your participant count
+            You must select exactly {config.totalParticipants} roles to match your participant count
           </div>
         )}
         {aiMismatch && !hasError && (
           <div className="mt-4 text-sm text-warning text-center">
-            You have {aiRolesCount} AI roles selected, but configured {wizard.aiParticipants} AI participants
+            You have {aiRolesCount} AI roles selected, but configured {config.aiParticipants} AI participants
           </div>
         )}
       </div>
@@ -126,9 +128,9 @@ export function ClanRoleSelection() {
       {/* Clan Selection */}
       <div className="space-y-6">
         {clans.map((clan: any) => {
-          const clanRoles = wizard.roleAssignments.filter(r => r.clan === clan.name)
+          const clanRoles = roleSelection.roleAssignments.filter(r => r.clan === clan.name)
           const selectedClanRoles = clanRoles.filter(r => r.isSelected)
-          const isClanSelected = wizard.selectedClans.includes(clan.name)
+          const isClanSelected = roleSelection.selectedClans.includes(clan.name)
 
           return (
             <div
@@ -273,7 +275,7 @@ export function ClanRoleSelection() {
           </li>
           <li className="flex items-start gap-2">
             <span className="text-primary">•</span>
-            <span>Total selected roles must match your total participant count ({wizard.totalParticipants})</span>
+            <span>Total selected roles must match your total participant count ({config.totalParticipants})</span>
           </li>
         </ul>
       </div>

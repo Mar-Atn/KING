@@ -7,54 +7,57 @@
 
 import { useState } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
+import { useWizardStore } from '../../stores/wizardStore'
 
 export function BasicConfiguration() {
   const {
-    wizard,
+    config,
     setRunName,
     setParticipantCounts,
     setLearningObjectives,
     setVotingThresholds,
   } = useSimulationStore()
 
+  const { wizard } = useWizardStore()
+
   const [objectiveInput, setObjectiveInput] = useState('')
 
   // Calculate default voting thresholds (2/3 majority)
-  const defaultVote1Threshold = Math.ceil(wizard.totalParticipants * 2 / 3)
-  const defaultVote2Threshold = Math.ceil(wizard.totalParticipants * 2 / 3)
+  const defaultVote1Threshold = Math.ceil(config.totalParticipants * 2 / 3)
+  const defaultVote2Threshold = Math.ceil(config.totalParticipants * 2 / 3)
 
   const handleVote1Change = (value: string) => {
     const num = parseInt(value)
-    setVotingThresholds(isNaN(num) ? null : num, wizard.vote2Threshold)
+    setVotingThresholds(isNaN(num) ? null : num, config.vote2Threshold)
   }
 
   const handleVote2Change = (value: string) => {
     const num = parseInt(value)
-    setVotingThresholds(wizard.vote1Threshold, isNaN(num) ? null : num)
+    setVotingThresholds(config.vote1Threshold, isNaN(num) ? null : num)
   }
 
   const handleAddObjective = () => {
-    if (objectiveInput.trim() && wizard.learningObjectives.length < 3) {
-      setLearningObjectives([...wizard.learningObjectives, objectiveInput.trim()])
+    if (objectiveInput.trim() && config.learningObjectives.length < 3) {
+      setLearningObjectives([...config.learningObjectives, objectiveInput.trim()])
       setObjectiveInput('')
     }
   }
 
   const handleRemoveObjective = (index: number) => {
-    setLearningObjectives(wizard.learningObjectives.filter((_, i) => i !== index))
+    setLearningObjectives(config.learningObjectives.filter((_, i) => i !== index))
   }
 
   const handleTotalParticipantsChange = (total: number) => {
     // Maintain ratio when total changes
-    const ratio = wizard.humanParticipants / wizard.totalParticipants || 0.8
+    const ratio = config.humanParticipants / config.totalParticipants || 0.8
     const human = Math.round(total * ratio)
     const ai = total - human
     setParticipantCounts(total, human, ai)
   }
 
   const handleHumanParticipantsChange = (human: number) => {
-    const ai = wizard.totalParticipants - human
-    setParticipantCounts(wizard.totalParticipants, human, ai)
+    const ai = config.totalParticipants - human
+    setParticipantCounts(config.totalParticipants, human, ai)
   }
 
   return (
@@ -73,7 +76,7 @@ export function BasicConfiguration() {
           <input
             id="runName"
             type="text"
-            value={wizard.runName}
+            value={config.runName}
             onChange={(e) => setRunName(e.target.value)}
             className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors ${
               wizard.errors.runName ? 'border-error' : 'border-neutral-300'
@@ -103,12 +106,12 @@ export function BasicConfiguration() {
                 type="range"
                 min="10"
                 max="30"
-                value={wizard.totalParticipants}
+                value={config.totalParticipants}
                 onChange={(e) => handleTotalParticipantsChange(Number(e.target.value))}
                 className="flex-1"
               />
               <span className="text-2xl font-bold text-primary w-12 text-center">
-                {wizard.totalParticipants}
+                {config.totalParticipants}
               </span>
             </div>
             <p className="mt-1 text-xs text-neutral-500">
@@ -127,8 +130,8 @@ export function BasicConfiguration() {
                 id="humanParticipants"
                 type="number"
                 min="0"
-                max={wizard.totalParticipants}
-                value={wizard.humanParticipants}
+                max={config.totalParticipants}
+                value={config.humanParticipants}
                 onChange={(e) => handleHumanParticipantsChange(Number(e.target.value))}
                 className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               />
@@ -142,7 +145,7 @@ export function BasicConfiguration() {
               <input
                 id="aiParticipants"
                 type="number"
-                value={wizard.aiParticipants}
+                value={config.aiParticipants}
                 disabled
                 className="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-100 text-neutral-600"
               />
@@ -158,21 +161,21 @@ export function BasicConfiguration() {
             <div className="h-2 bg-neutral-200 rounded-full overflow-hidden flex">
               <div
                 className="bg-primary transition-all"
-                style={{ width: `${(wizard.humanParticipants / wizard.totalParticipants) * 100}%` }}
+                style={{ width: `${(config.humanParticipants / config.totalParticipants) * 100}%` }}
               />
               <div
                 className="bg-secondary transition-all"
-                style={{ width: `${(wizard.aiParticipants / wizard.totalParticipants) * 100}%` }}
+                style={{ width: `${(config.aiParticipants / config.totalParticipants) * 100}%` }}
               />
             </div>
             <div className="flex justify-between mt-2 text-xs text-neutral-600">
               <span>
                 <span className="inline-block w-3 h-3 bg-primary rounded-full mr-1" />
-                Human ({wizard.humanParticipants})
+                Human ({config.humanParticipants})
               </span>
               <span>
                 <span className="inline-block w-3 h-3 bg-secondary rounded-full mr-1" />
-                AI ({wizard.aiParticipants})
+                AI ({config.aiParticipants})
               </span>
             </div>
           </div>
@@ -183,7 +186,7 @@ export function BasicConfiguration() {
           <h3 className="font-medium text-neutral-900 mb-2">⚖️ Voting Thresholds (Sacred Tradition)</h3>
           <p className="text-sm text-neutral-600 mb-4">
             Set the number of votes required for a candidate to be elected King.
-            Default is 2/3 majority ({defaultVote1Threshold} votes out of {wizard.totalParticipants}).
+            Default is 2/3 majority ({defaultVote1Threshold} votes out of {config.totalParticipants}).
           </p>
 
           <div className="grid grid-cols-2 gap-4">
@@ -196,8 +199,8 @@ export function BasicConfiguration() {
                 id="vote1Threshold"
                 type="number"
                 min="1"
-                max={wizard.totalParticipants}
-                value={wizard.vote1Threshold ?? defaultVote1Threshold}
+                max={config.totalParticipants}
+                value={config.vote1Threshold ?? defaultVote1Threshold}
                 onChange={(e) => handleVote1Change(e.target.value)}
                 className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 placeholder={`Default: ${defaultVote1Threshold}`}
@@ -216,8 +219,8 @@ export function BasicConfiguration() {
                 id="vote2Threshold"
                 type="number"
                 min="1"
-                max={wizard.totalParticipants}
-                value={wizard.vote2Threshold ?? defaultVote2Threshold}
+                max={config.totalParticipants}
+                value={config.vote2Threshold ?? defaultVote2Threshold}
                 onChange={(e) => handleVote2Change(e.target.value)}
                 className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 placeholder={`Default: ${defaultVote2Threshold}`}
@@ -236,9 +239,9 @@ export function BasicConfiguration() {
           </label>
 
           {/* Existing Objectives */}
-          {wizard.learningObjectives.length > 0 && (
+          {config.learningObjectives.length > 0 && (
             <div className="space-y-2 mb-3">
-              {wizard.learningObjectives.map((objective, index) => (
+              {config.learningObjectives.map((objective, index) => (
                 <div
                   key={index}
                   className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-4 py-2"
@@ -258,7 +261,7 @@ export function BasicConfiguration() {
           )}
 
           {/* Add Objective Input */}
-          {wizard.learningObjectives.length < 3 && (
+          {config.learningObjectives.length < 3 && (
             <div className="flex gap-2">
               <input
                 type="text"
@@ -288,23 +291,23 @@ export function BasicConfiguration() {
           <h4 className="font-medium text-primary mb-2">Configuration Summary</h4>
           <ul className="space-y-1 text-sm text-neutral-700">
             <li>
-              <strong>Name:</strong> {wizard.runName || '(Not set)'}
+              <strong>Name:</strong> {config.runName || '(Not set)'}
             </li>
             <li>
-              <strong>Participants:</strong> {wizard.totalParticipants} total ({wizard.humanParticipants} human,{' '}
-              {wizard.aiParticipants} AI)
+              <strong>Participants:</strong> {config.totalParticipants} total ({config.humanParticipants} human,{' '}
+              {config.aiParticipants} AI)
             </li>
             <li>
-              <strong>Vote 1 Threshold:</strong> {wizard.vote1Threshold ?? defaultVote1Threshold} votes
+              <strong>Vote 1 Threshold:</strong> {config.vote1Threshold ?? defaultVote1Threshold} votes
             </li>
             <li>
-              <strong>Vote 2 Threshold:</strong> {wizard.vote2Threshold ?? defaultVote2Threshold} votes
+              <strong>Vote 2 Threshold:</strong> {config.vote2Threshold ?? defaultVote2Threshold} votes
             </li>
             <li>
-              <strong>Template:</strong> {wizard.selectedTemplate?.name} {wizard.selectedTemplate?.version}
+              <strong>Template:</strong> {config.selectedTemplate?.name} {config.selectedTemplate?.version}
             </li>
             <li>
-              <strong>Objectives:</strong> {wizard.learningObjectives.length || 'None specified'}
+              <strong>Objectives:</strong> {config.learningObjectives.length || 'None specified'}
             </li>
           </ul>
         </div>

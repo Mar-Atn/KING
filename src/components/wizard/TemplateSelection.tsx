@@ -6,10 +6,12 @@
  */
 
 import { useSimulationStore } from '../../stores/simulationStore'
+import { useWizardStore } from '../../stores/wizardStore'
 import { KING_PROCESS_PHASES, getTotalDuration } from '../../lib/processDefinition'
 
 export function TemplateSelection() {
-  const { templates, wizard, selectTemplate } = useSimulationStore()
+  const { templates, config, selectTemplate } = useSimulationStore()
+  const { wizard } = useWizardStore()
 
   if (wizard.isLoading) {
     return (
@@ -46,7 +48,7 @@ export function TemplateSelection() {
       {/* Templates Grid */}
       <div className="space-y-4">
         {templates.map((template) => {
-          const isSelected = wizard.selectedTemplate?.template_id === template.template_id
+          const isSelected = config.selectedTemplate?.template_id === template.template_id
           const stages = template.process_stages as any[]
           const clans = template.canonical_clans as any[]
           const roles = template.canonical_roles as any[]

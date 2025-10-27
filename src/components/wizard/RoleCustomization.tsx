@@ -11,26 +11,28 @@
  */
 
 import { useState } from 'react'
-import { useSimulationStore } from '../../stores/simulationStore'
+import { useSimulationStore } from "../../stores/simulationStore";
+import { useRoleSelectionStore } from "../../stores/roleSelectionStore"
 
 export function RoleCustomization() {
+  const { config } = useSimulationStore()
   const {
-    wizard,
+    roleSelection,
     updateRoleCustomization,
     resetRoleCustomizations,
-  } = useSimulationStore()
+  } = useRoleSelectionStore()
 
-  const template = wizard.selectedTemplate
+  const template = config.selectedTemplate
   const roles = (template?.canonical_roles as any[]) || []
-  const selectedRoles = wizard.roleAssignments.filter(r => r.isSelected)
+  const selectedRoles = roleSelection.roleAssignments.filter(r => r.isSelected)
 
   const [selectedClan, setSelectedClan] = useState<string>('all')
   const [expandedRole, setExpandedRole] = useState<number | null>(null)
 
   const getRoleData = (sequence: number) => {
     const templateRole = roles.find((r: any) => r.sequence === sequence)
-    const customization = wizard.roleCustomizations[sequence]
-    const assignment = wizard.roleAssignments.find(r => r.sequence === sequence)
+    const customization = roleSelection.roleCustomizations[sequence]
+    const assignment = roleSelection.roleAssignments.find(r => r.sequence === sequence)
 
     return {
       sequence,
@@ -52,7 +54,7 @@ export function RoleCustomization() {
   // Get unique clans from selected roles
   const clansInSelection = Array.from(new Set(selectedRoles.map(r => r.clan)))
 
-  const hasCustomizations = Object.keys(wizard.roleCustomizations).length > 0
+  const hasCustomizations = Object.keys(roleSelection.roleCustomizations).length > 0
 
   return (
     <div>
@@ -105,7 +107,7 @@ export function RoleCustomization() {
             {filteredRoles.map((role) => {
               const roleData = getRoleData(role.sequence)
               const isExpanded = expandedRole === role.sequence
-              const isCustomized = !!wizard.roleCustomizations[role.sequence]
+              const isCustomized = !!roleSelection.roleCustomizations[role.sequence]
 
               return (
                 <div

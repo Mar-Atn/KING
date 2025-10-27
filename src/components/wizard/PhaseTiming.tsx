@@ -7,28 +7,30 @@
  */
 
 import { useSimulationStore } from '../../stores/simulationStore'
+import { useRoleSelectionStore } from '../../stores/roleSelectionStore'
 
 export function PhaseTiming() {
+  const { config } = useSimulationStore()
   const {
-    wizard,
+    roleSelection,
     setPhaseDuration,
     setTotalDuration,
     resetPhaseDurations,
-  } = useSimulationStore()
+  } = useRoleSelectionStore()
 
-  const template = wizard.selectedTemplate
+  const template = config.selectedTemplate
   const stages = template?.process_stages as any[] || []
 
   // Calculate current total duration
   const totalDuration = stages.reduce((sum, stage) => {
-    const customDuration = wizard.phaseDurations[stage.sequence]
+    const customDuration = roleSelection.phaseDurations[stage.sequence]
     return sum + (customDuration ?? stage.default_duration_minutes)
   }, 0)
 
   // Calculate default total from template
   const defaultTotal = stages.reduce((sum, stage) => sum + stage.default_duration_minutes, 0)
 
-  const hasCustomizations = Object.keys(wizard.phaseDurations).length > 0
+  const hasCustomizations = Object.keys(roleSelection.phaseDurations).length > 0
 
   return (
     <div>
@@ -62,7 +64,7 @@ export function PhaseTiming() {
               onChange={(e) => {
                 const newTotal = parseInt(e.target.value)
                 if (!isNaN(newTotal) && newTotal >= 30 && newTotal <= 300) {
-                  setTotalDuration(newTotal)
+                  if (template) setTotalDuration(template, newTotal)
                 }
               }}
               className="w-full px-4 py-3 border border-neutral-300 rounded-lg text-center text-2xl font-bold text-primary focus:outline-none focus:ring-2 focus:ring-primary"
@@ -83,7 +85,7 @@ export function PhaseTiming() {
       {/* Phase List */}
       <div className="space-y-3">
         {stages.map((stage: any) => {
-          const customDuration = wizard.phaseDurations[stage.sequence]
+          const customDuration = roleSelection.phaseDurations[stage.sequence]
           const currentDuration = customDuration ?? stage.default_duration_minutes
           const isModified = customDuration !== undefined
 
@@ -135,8 +137,14 @@ export function PhaseTiming() {
                     <button
                       onClick={() => {
                         // Reset to default by removing from customizations
-                        const { [stage.sequence]: _, ...rest } = wizard.phaseDurations
-                        wizard.phaseDurations = rest
+                        // Remove the phase duration by setting all others except this one
+                        const newPhaseDurations: Record<number, number> = Object.keys(roleSelection.phaseDurations)
+                          .filter(key => parseInt(key) !== stage.sequence)
+                          .reduce((obj, key) => ({ ...obj, [key]: roleSelection.phaseDurations[parseInt(key)] }), {} as Record<number, number>)
+                        resetPhaseDurations()
+                        Object.keys(newPhaseDurations).forEach(key => {
+                          setPhaseDuration(parseInt(key), newPhaseDurations[parseInt(key)])
+                        })
                         setPhaseDuration(stage.sequence, stage.default_duration_minutes)
                       }}
                       className="ml-2 text-xs text-neutral-500 hover:text-neutral-700"

@@ -17,7 +17,9 @@
 import { useEffect } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useSimulationStore, type WizardStep } from '../stores/simulationStore'
+import { useSimulationStore } from '../stores/simulationStore'
+import { useWizardStore, type WizardStep } from '../stores/wizardStore'
+import { useRoleSelectionStore } from '../stores/roleSelectionStore'
 import { TemplateSelection } from '../components/wizard/TemplateSelection'
 import { BasicConfiguration } from '../components/wizard/BasicConfiguration'
 import { ClanRoleSelection } from '../components/wizard/ClanRoleSelection'
@@ -32,17 +34,16 @@ export function SimulationWizard() {
   const [searchParams] = useSearchParams()
   const mode = searchParams.get('mode') || 'create' // 'create' or 'edit'
 
-  const {
-    wizard,
-    nextStep,
-    previousStep,
-    goToStep,
-    resetWizard,
-    loadTemplates,
-    createSimulation,
-    updateSimulation,
-    loadSimulationForEdit,
-  } = useSimulationStore()
+  const { loadTemplates, createSimulation, updateSimulation, loadSimulationForEdit, validateCurrentStep } = useSimulationStore()
+  const { wizard, nextStep: wizardNextStep, previousStep, goToStep, resetWizard } = useWizardStore()
+  const roleStore = useRoleSelectionStore()
+
+  // Wrapper for nextStep that validates before moving forward
+  const nextStep = () => {
+    if (validateCurrentStep(wizard.currentStep)) {
+      wizardNextStep()
+    }
+  }
 
   // Handle creation/update process
   const handleSaveSimulation = async () => {
@@ -53,7 +54,7 @@ export function SimulationWizard() {
       : await createSimulation(user.id)
 
     if (result.success) {
-      nextStep() // Move to success screen
+      wizardNextStep() // Move to success screen directly without validation
     }
   }
 
@@ -194,7 +195,7 @@ export function SimulationWizard() {
           </div>
         )
       case 7:
-        return <SimulationSuccess mode={mode} />
+        return <SimulationSuccess mode={mode as 'create' | 'edit'} />
       default:
         return null
     }
@@ -230,6 +231,7 @@ export function SimulationWizard() {
                   : 'Cancel simulation creation? All progress will be lost.'
                 if (confirm(message)) {
                   resetWizard()
+                  roleStore.resetRoleSelection()
                   navigate('/dashboard')
                 }
               }}
