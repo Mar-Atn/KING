@@ -63,6 +63,13 @@ export function SimulationWizard() {
     loadTemplates()
   }, [loadTemplates])
 
+  // Reset wizard when in create mode (not edit)
+  useEffect(() => {
+    if (mode === 'create') {
+      resetWizard()
+    }
+  }, [mode, resetWizard])
+
   // Load simulation data when in edit mode
   useEffect(() => {
     if (mode === 'edit' && runId) {
