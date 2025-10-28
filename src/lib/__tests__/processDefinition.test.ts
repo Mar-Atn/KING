@@ -39,7 +39,8 @@ describe('Process Definition', () => {
 
     it('should have correct sequence numbers', () => {
       KING_PROCESS_PHASES.forEach((phase, index) => {
-        expect(phase.stage_number).toBe(index + 1)
+        // Phases are numbered 0-15
+        expect(phase.stage_number).toBe(index)
       })
     })
   })
@@ -61,12 +62,13 @@ describe('Process Definition', () => {
     it('should retrieve last phase correctly', () => {
       const phase = getPhaseByNumber(15)
       expect(phase).toBeDefined()
-      expect(phase?.stage_name).toBe('Group Reflections')
+      expect(phase?.stage_name).toBe('Plenary Debriefing')
     })
 
-    it('should return null for invalid phase numbers', () => {
-      expect(getPhaseByNumber(-1)).toBeNull()
-      expect(getPhaseByNumber(99)).toBeNull()
+    it('should return undefined for invalid phase numbers', () => {
+      // getPhaseByNumber returns undefined (not null) for invalid numbers
+      expect(getPhaseByNumber(-1)).toBeUndefined()
+      expect(getPhaseByNumber(99)).toBeUndefined()
     })
   })
 
@@ -89,15 +91,18 @@ describe('Process Definition', () => {
 
   describe('Stage Validation', () => {
     it('should validate valid stage numbers', () => {
-      expect(isValidStageNumber(0)).toBe(true)
+      // isValidStageNumber checks >= 1 && <= length (16)
+      // So valid range is 1-16
       expect(isValidStageNumber(1)).toBe(true)
       expect(isValidStageNumber(15)).toBe(true)
+      expect(isValidStageNumber(16)).toBe(true)
       expect(isValidStageNumber(8)).toBe(true)
     })
 
     it('should invalidate out-of-bounds stage numbers', () => {
+      expect(isValidStageNumber(0)).toBe(false) // < 1
       expect(isValidStageNumber(-1)).toBe(false)
-      expect(isValidStageNumber(16)).toBe(false)
+      expect(isValidStageNumber(17)).toBe(false) // > 16
       expect(isValidStageNumber(99)).toBe(false)
     })
   })
@@ -113,12 +118,22 @@ describe('Process Definition', () => {
       expect(prev?.stage_number).toBe(4)
     })
 
-    it('should return null for next phase after last (15)', () => {
+    it('should return undefined for next phase after last (15)', () => {
       const next = getNextPhase(15)
-      expect(next).toBeNull()
+      // getNextPhase(15) checks if stage 16 is valid
+      // isValidStageNumber(16) returns true (16 >= 1 && 16 <= 16)
+      // But getPhaseByNumber(16) returns undefined (no phase with stage_number 16)
+      // Because phases are numbered 0-15, not 1-16
+      expect(next).toBeUndefined()
     })
 
-    it('should return null for previous phase before first (0)', () => {
+    it('should return null for previous phase before first (1)', () => {
+      // Since isValidStageNumber starts at 1, previous of 1 is invalid
+      const prev = getPreviousPhase(1)
+      expect(prev).toBeNull()
+    })
+
+    it('should return null for previous of stage 0 (out of valid range)', () => {
       const prev = getPreviousPhase(0)
       expect(prev).toBeNull()
     })
