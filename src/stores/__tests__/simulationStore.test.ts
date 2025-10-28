@@ -12,15 +12,19 @@ import { TEST_SIMULATION, createTestSimulation } from '@/test/fixtures/testData'
 
 // Mock the supabase client
 vi.mock('@/lib/supabase', () => {
+  const createMockQueryBuilder = () => ({
+    select: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    update: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    single: vi.fn(),
+    maybeSingle: vi.fn(),
+  })
+
   const mockClient = {
-    from: vi.fn((table: string) => ({
-      select: vi.fn().mockReturnThis(),
-      insert: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn(),
-    })),
+    from: vi.fn(() => createMockQueryBuilder()),
   }
   return { supabase: mockClient }
 })
@@ -34,6 +38,8 @@ vi.mock('../wizardStore', () => ({
       clearError: vi.fn(),
       clearErrors: vi.fn(), // Used by validateCurrentStep
       addError: vi.fn(),
+      setSaving: vi.fn(), // Used by create/update
+      setWizardMode: vi.fn(), // Used by loadSimulationForEdit
     })),
   },
 }))
@@ -43,8 +49,17 @@ vi.mock('../roleSelectionStore', () => ({
   useRoleSelectionStore: {
     getState: vi.fn(() => ({
       roleAssignments: {},
+      roleSelection: {
+        selectedClans: [],
+        phaseDurations: {},
+      },
       getAssignedRoles: vi.fn(() => []),
+      getSelectedRoles: vi.fn(() => []), // Used by createSimulation
+      getAIRoles: vi.fn(() => []), // Used by validateCurrentStep
       initializeRoleAssignments: vi.fn(), // Used by setParticipantCounts
+      setSelectedClans: vi.fn(), // Used by loadSimulationForEdit
+      setRoleAssignments: vi.fn(), // Used by loadSimulationForEdit
+      setPhaseDurations: vi.fn(), // Used by loadSimulationForEdit
       assignRole: vi.fn(),
       unassignRole: vi.fn(),
     })),
@@ -334,7 +349,7 @@ describe('Simulation Store', () => {
       const result = await store.deleteSimulation(TEST_SIMULATION.run_id)
 
       expect(result.success).toBe(false)
-      expect(result.error).toContain('Cannot delete')
+      expect(result.error).toContain('Failed to delete simulation')
     })
   })
 
@@ -370,10 +385,10 @@ describe('Simulation Store', () => {
       store.setParticipantCounts(18, 15, 3)
       expect(store.validateCurrentStep(2)).toBe(true)
 
-      // Invalid: human + ai ≠ total
-      store.setParticipantCounts(18, 10, 5) // 10 + 5 = 15 ≠ 18
-      // Validation should still pass as long as run name exists
-      expect(store.validateCurrentStep(2)).toBe(true)
+      // Invalid: human + ai ≠ total (10 + 5 = 15 ≠ 18)
+      store.setParticipantCounts(18, 10, 5)
+      // Validation should fail when counts don't match
+      expect(store.validateCurrentStep(2)).toBe(false)
     })
   })
 })

@@ -76,6 +76,26 @@ describe('AuthContext', () => {
     vi.restoreAllMocks()
   })
 
+  describe('Hook Error Handling', () => {
+    it('should throw error when useAuth used outside provider', () => {
+      // Test component without provider
+      function TestWithoutProvider() {
+        try {
+          useAuth()
+          return <div>Should not render</div>
+        } catch (error: any) {
+          return <div data-testid="error">{error.message}</div>
+        }
+      }
+
+      render(<TestWithoutProvider />)
+
+      expect(screen.getByTestId('error').textContent).toBe(
+        'useAuth must be used within an AuthProvider'
+      )
+    })
+  })
+
   describe('Initial State', () => {
     it('should start with loading = true', () => {
       render(
@@ -229,6 +249,127 @@ describe('AuthContext', () => {
 
       // User should be set from session, even if profile fails
       expect(screen.getByTestId('user-id').textContent).toBe(user.id)
+    })
+
+    it('should auto-create profile on first sign-up when profile not found', async () => {
+      const newUser = {
+        id: '99999999-9999-9999-9999-999999999999',
+        email: 'newuser@test.com',
+        user_metadata: { role: 'participant' },
+      }
+      const session = mockAuthSession(newUser.id, 'participant')
+
+      vi.mocked(mockSupabase.auth.getSession).mockResolvedValue(session as any)
+
+      // Mock getUser for profile creation
+      vi.mocked(mockSupabase.auth.getUser).mockResolvedValue({
+        data: {
+          user: {
+            id: newUser.id,
+            email: newUser.email,
+            user_metadata: newUser.user_metadata,
+          },
+        },
+        error: null,
+      } as any)
+
+      const createdProfile = {
+        id: newUser.id,
+        email: newUser.email,
+        role: 'participant',
+        status: 'registered',
+      }
+
+      // Mock: SELECT returns null, then UPSERT creates profile
+      const mockFrom = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          }),
+        }),
+        upsert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue(mockQuerySuccess(createdProfile)),
+          }),
+        }),
+      })
+      vi.mocked(mockSupabase.from).mockImplementation(mockFrom as any)
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('profile-role').textContent).toBe('participant')
+      })
+    })
+  })
+
+  describe('Profile Management', () => {
+    it('should refresh profile when refreshProfile is called', async () => {
+      const user = TEST_USERS.facilitator
+      const session = mockAuthSession(user.id, 'facilitator')
+
+      vi.mocked(mockSupabase.auth.getSession).mockResolvedValue(session as any)
+
+      const initialProfile = { ...user, display_name: 'Initial Name' }
+      const updatedProfile = { ...user, display_name: 'Updated Name' }
+
+      let profileVersion = 0
+      const mockFrom = vi.fn().mockImplementation(() => ({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue(
+              mockQuerySuccess(profileVersion === 0 ? initialProfile : updatedProfile)
+            ),
+          }),
+        }),
+      }))
+      vi.mocked(mockSupabase.from).mockImplementation(mockFrom as any)
+
+      // Component that can trigger refresh
+      function TestRefreshComponent() {
+        const auth = useAuth()
+        return (
+          <div>
+            <div data-testid="profile-name">{auth.profile?.display_name || 'null'}</div>
+            <button
+              data-testid="refresh-btn"
+              onClick={() => {
+                profileVersion = 1
+                auth.refreshProfile()
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+        )
+      }
+
+      const { getByTestId } = render(
+        <AuthProvider>
+          <TestRefreshComponent />
+        </AuthProvider>
+      )
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(getByTestId('profile-name').textContent).toBe('Initial Name')
+      })
+
+      // Click refresh button
+      const refreshBtn = getByTestId('refresh-btn')
+      refreshBtn.click()
+
+      // Should show updated profile
+      await waitFor(() => {
+        expect(getByTestId('profile-name').textContent).toBe('Updated Name')
+      })
     })
   })
 
