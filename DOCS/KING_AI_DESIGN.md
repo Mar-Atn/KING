@@ -109,6 +109,47 @@ User Voice ↔ ElevenLabs Agent (ASR/TTS)
 ```
 
 
+##UPDATE ON AI FOR PILOT.
+
+### Goal: We want full AI particioants integration. They need to be able to play and reflect at par with Huamns (or as close as it gets).
+
+### Technologies and limitations: Main technical limitation: For now we have no reliable solution for a live meeting, where several AI agents and one or more humans are talking. This migh be messy (despite we have several succesful prottypes). This will be the main restriction. We have:  tested AI meta-cognitive model, tested AI elevenlabs voice agent.
+
+### We want to keep as much as possible free and natural AI-Human, AI-AI, Human-Human conversations, with minimum limitations. 
+
+###The MAIN communication formats in the SIM are: :
+    - Clan councils
+    - Free consultations
+    - Public speeches 
+
+
+### Way (technology/means) to communicate in SIM: 
+    - Humans will talk btween them selves freely, with n formall setting of metings necessary, no recording. 
+    - AI-s could meet easily via chats (any sise of AI only meeting). 
+    - If AI and humans particioate - only one AI max could be invited. He.she will join humans via any human participant Interface (calling a meeting) or via AI's own 'computer' - AI-Participant interface (admin managed).
+    We will set that each of those activities shall have either only humans, or all AI-s, or, in case of mix - not more then one ACTIVE AI participant. 
+
+### OUR MVP basic limitation (avoiding more then one AI in one conversation, if mixed with humans, keep all other freedoms intact): 
+    - Clans: will consist of all humans, all AI-s or 1 AI and the rest humans. So clan meetings could be (1) AI chat (2) Pure human free talk- not in system till voting (3) One AI goining huan free talk via one of the computers of the Human participants or from 'own admin computer' (like avater)
+    - Free consutations: similar, if human-human - no limits, if AI & AI - simple chat, if AI and Humans - only one AI, and as many humans as they want could join (for the system it would be still one Participant talking, but they could explicitely say who'sin the meeting at the inception of the conversation)
+    - Public speeched - human freely talk; If question - free question. AI - same - free talk and answers questions staying at the same life session. 
+
+
+### TESTING AND 
+   - AI must be a separate easy to test and ultimately transferrable module.
+   - From the inception we must build it having in minfd the communication protocols, decisions and actions - that will allow to plug seemlessly to the SIM APP - standards of inputs and outputs, formats and standards of echanges (getting roles and cntext, voting, conversatian, receiing updates etc.)
+   - Admin should have a comfortable interface setting promts, updating context, testing basic elements of AI in a separate 'sandbox' module, 
+   - Admin should keep ability top interfere, help, update cntext manually - for the AI participants any tme during the sim. 
+   - We could keep life conversation interface in the admin shop as a possible communication window for AI with the real world (e.g. when speaking publicly, or ad-hoc conversation/questions, comments)
+   
+
+
+
+
+
+
+
+
 # THE NEW KING - AI PARTICIPANT PROMPTS
 **Complete Prompt Templates for AI Character System**  
 **Version 1.0**  

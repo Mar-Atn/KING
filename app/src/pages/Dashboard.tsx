@@ -60,31 +60,20 @@ export function Dashboard() {
 
       console.log('📊 Loaded simulations:', sims?.length || 0)
 
-      // For each simulation, get current phase (active or last completed) and phase count
+      // For each simulation, get current phase from sim_runs.current_phase_id
       const simsWithPhases = await Promise.all(
         (sims || []).map(async (sim) => {
-          // Get active phase (if any)
-          const { data: activePhase } = await supabase
-            .from('phases')
-            .select('*')
-            .eq('run_id', sim.run_id)
-            .eq('status', 'active')
-            .maybeSingle()
+          let currentPhase = null
 
-          let currentPhase = activePhase
-
-          // If no active phase, get last completed phase
-          if (!currentPhase) {
-            const { data: lastCompleted } = await supabase
+          // Use current_phase_id from sim_runs table (single source of truth)
+          if (sim.current_phase_id) {
+            const { data: phase } = await supabase
               .from('phases')
               .select('*')
-              .eq('run_id', sim.run_id)
-              .eq('status', 'completed')
-              .order('sequence_number', { ascending: false })
-              .limit(1)
+              .eq('phase_id', sim.current_phase_id)
               .maybeSingle()
 
-            currentPhase = lastCompleted
+            currentPhase = phase
           }
 
           // Get total phase count (cached query, should be fast)
@@ -93,7 +82,7 @@ export function Dashboard() {
             .select('*', { count: 'exact', head: true })
             .eq('run_id', sim.run_id)
 
-          console.log(`📍 ${sim.run_name}: ${count || 0} phases, current: ${currentPhase?.name || 'none'} (status: ${currentPhase?.status || 'N/A'})`)
+          console.log(`📍 ${sim.run_name}: ${count || 0} phases, current: ${currentPhase?.name || 'none'} (from current_phase_id: ${sim.current_phase_id || 'null'})`)
 
           return {
             ...sim,

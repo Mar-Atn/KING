@@ -1,3 +1,62 @@
+TODAY: 
+
+#KING
+
+all human MVP
+## FIX DATA/ SQL RLS
+## CREATE AND RUN TESTS
+## FIX IS FACILITATOR
+## FIX PHASES PROGRESS
+
+## ensure AI players are accounted for (*)
+## update ai strategy and concept of communication in PRD (*) and TECH - 
+
+## FIX INTRO DAHBOARD (CORRECT DATA - as IN USER DAHBOARD)
+## IMPLEMENT VOTINGS (Clan - MAin1 - Main 2 - clan 2 - additional in clan - additional general)
+## IMPLEMENT KING DECISION DAHSBOARD () 
+## IMPLEMENT CLAN FINAL DECISIONS DASHBOADS ()?
+
+ai character system - as a separate MODULE(!*)
+## promts
+## 4 blocks
+## self updates 
+## concept
+## conversational avatar
+## decisions
+
+mini game ai-ai
+
+mini game human- human
+
+FULL ASSEMBLY FOR MVP
+
+
+DONE:
+## FIX THE PRINTING TO BE 12 STAGES and NOT 11, and called PHASES.
+## ADJUST WHAT THE PLAYERS SEE.
+## AVATARS!
+
+
+
+
+#EXNESS
+
+## SWAP 1 and 3 - REASSIGN SCORES and WEIGHTS! 
+
+DONE:
+## TEST CASE - FULL + PERSONA + KEYS + SEQUENCE  + TEST IT 
+## GAME EXMG FULL DESCRIPTION FOR PARTICIPANTS _ DRAFT WRITE SEND: RULES, AI ASSESMENT ARCHITECTURE, ISSUES
+## ALLOW LONG Waiting  for ALL AGENTS
+##  ADD PARAGRAPH - NOT TO ACCEPT EASILY THE 
+
+
+
+
+#PhD
+
+
+
+
 # Suparbase
 
 Project name:KING

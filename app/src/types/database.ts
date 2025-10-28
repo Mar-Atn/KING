@@ -67,6 +67,7 @@ export interface SimRun {
   started_at: string | null
   completed_at: string | null
   facilitator_id: string | null
+  current_phase_id: string | null
   notes: string | null
   learning_objectives: string[] | null
 }
@@ -78,6 +79,7 @@ export interface User {
   full_name: string | null
   avatar_url: string | null
   role: UserRole
+  is_facilitator: boolean
   status: UserStatus
   current_event_code: string | null
   created_at: string

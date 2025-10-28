@@ -119,20 +119,23 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
 
       if (error) throw error
 
-      // Find active or most recent phase
-      const activePhase = phases?.find((p) => p.status === 'active')
-      const lastCompletedPhase = phases
-        ?.filter((p) => p.status === 'completed')
-        .sort((a, b) => b.sequence_number - a.sequence_number)[0]
+      // Get current phase from sim_runs.current_phase_id (single source of truth)
+      const { data: simRun } = await supabase
+        .from('sim_runs')
+        .select('current_phase_id')
+        .eq('run_id', runId)
+        .single()
 
-      const currentPhase = activePhase || lastCompletedPhase || null
+      const currentPhase = simRun?.current_phase_id
+        ? phases?.find((p) => p.phase_id === simRun.current_phase_id) || null
+        : null
 
-      // If there's an active phase with a started_at time, start the timer
-      if (activePhase && activePhase.started_at) {
-        const startedAt = new Date(activePhase.started_at)
+      // If current phase is active and has a started_at time, start the timer
+      if (currentPhase && currentPhase.status === 'active' && currentPhase.started_at) {
+        const startedAt = new Date(currentPhase.started_at)
         const now = new Date()
         const elapsedSeconds = Math.floor((now.getTime() - startedAt.getTime()) / 1000)
-        const totalDurationSeconds = (activePhase.actual_duration_minutes || activePhase.default_duration_minutes) * 60
+        const totalDurationSeconds = (currentPhase.actual_duration_minutes || currentPhase.default_duration_minutes) * 60
         const remainingSeconds = Math.max(0, totalDurationSeconds - elapsedSeconds)
 
         get().startTimer(remainingSeconds)
@@ -169,13 +172,25 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
   // ========================================================================
 
   startPhase: async (phaseId: string) => {
-    const { allPhases, runId, getCurrentPhaseIndex, startTimer } = get()
+    const { allPhases, runId, getCurrentPhaseIndex, startTimer, currentPhase: localCurrentPhase } = get()
     if (!runId) throw new Error('No run_id set')
 
     const phase = allPhases.find((p) => p.phase_id === phaseId)
     if (!phase) throw new Error('Phase not found')
 
     const currentIndex = getCurrentPhaseIndex()
+
+    console.log('🚀 Starting phase:', {
+      attempting_to_start: { id: phaseId, name: phase.name, sequence: phase.sequence_number },
+      current_local_phase: localCurrentPhase ? {
+        id: localCurrentPhase.phase_id,
+        name: localCurrentPhase.name,
+        sequence: localCurrentPhase.sequence_number,
+        status: localCurrentPhase.status
+      } : null,
+      currentIndex,
+      total_phases: allPhases.length
+    })
 
     // Validation: Can only start the next phase in sequence
     // If no phase is active yet (currentIndex = -1), allow starting the first phase (minimum sequence_number)
@@ -184,16 +199,24 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
     if (currentIndex === -1) {
       // No phase active yet - allow starting the first phase (find minimum sequence_number)
       expectedSequence = Math.min(...allPhases.map(p => p.sequence_number))
+      console.log('✓ No current phase, allowing first phase. Expected sequence:', expectedSequence)
     } else {
       // Phase active - next phase must be current sequence_number + 1
       const currentPhase = allPhases[currentIndex]
       expectedSequence = currentPhase.sequence_number + 1
+      console.log('✓ Current phase found. Expected next sequence:', expectedSequence, 'Attempting:', phase.sequence_number)
     }
 
     if (phase.sequence_number !== expectedSequence) {
+      console.error('❌ Validation failed:', {
+        expected: expectedSequence,
+        attempting: phase.sequence_number,
+        phase_name: phase.name
+      })
       throw new Error('Cannot skip phases. Must complete phases in order.')
     }
 
+    console.log('✓ Validation passed, proceeding with phase start')
     set({ loading: true, error: null })
 
     try {
@@ -216,17 +239,52 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
 
       if (phaseError) throw phaseError
 
-      // If first phase, update simulation status to 'in_progress'
-      if (isFirstPhase) {
-        const { error: simError } = await supabase
-          .from('sim_runs')
-          .update({
-            status: 'in_progress',
-            started_at: startedAt,
-          })
-          .eq('run_id', runId)
+      // Update simulation: set current_phase_id and status
+      // If first phase, also update status to 'in_progress' and started_at
+      const simUpdate: any = {
+        current_phase_id: phaseId,
+      }
 
-        if (simError) throw simError
+      if (isFirstPhase) {
+        simUpdate.status = 'in_progress'
+        simUpdate.started_at = startedAt
+      }
+
+      console.log('🔄 Updating sim_runs:', { runId, simUpdate })
+
+      const { data: updateResult, error: simError } = await supabase
+        .from('sim_runs')
+        .update(simUpdate)
+        .eq('run_id', runId)
+        .select('run_id, current_phase_id')
+
+      console.log('✅ sim_runs update result:', {
+        simError,
+        updateResult,
+        expected_phase_id: phaseId
+      })
+
+      if (simError) {
+        console.error('❌ Failed to update sim_runs:', simError)
+        throw simError
+      }
+
+      // Verify the update actually happened
+      const { data: verification } = await supabase
+        .from('sim_runs')
+        .select('current_phase_id, run_id')
+        .eq('run_id', runId)
+        .single()
+
+      console.log('🔍 Verification read from DB:', {
+        run_id: verification?.run_id,
+        current_phase_id_in_db: verification?.current_phase_id,
+        expected_phase_id: phaseId,
+        match: verification?.current_phase_id === phaseId
+      })
+
+      if (verification?.current_phase_id !== phaseId) {
+        console.error('⚠️ WARNING: Database verification failed! Phase ID mismatch.')
       }
 
       // Log event
@@ -349,7 +407,13 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
       const startedAt = currentPhase.started_at ? new Date(currentPhase.started_at) : new Date()
       const actualDurationMinutes = Math.ceil((new Date(endedAt).getTime() - startedAt.getTime()) / 60000)
 
-      // Update database
+      console.log('🏁 Ending phase:', {
+        phase_id: currentPhase.phase_id,
+        phase_name: currentPhase.name,
+        sequence: currentPhase.sequence_number
+      })
+
+      // Update phase in database
       const { error } = await supabase
         .from('phases')
         .update({
@@ -360,6 +424,10 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
         .eq('phase_id', currentPhase.phase_id)
 
       if (error) throw error
+
+      // Keep current_phase_id pointing to this completed phase
+      // (it will be updated when next phase starts)
+      console.log('✅ Phase ended, current_phase_id still points to:', currentPhase.phase_id)
 
       // Log event
       await logPhaseEvent('phase_ended', runId, currentPhase.phase_id, currentPhase.name, {

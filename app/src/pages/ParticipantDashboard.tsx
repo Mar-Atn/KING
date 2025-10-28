@@ -9,11 +9,12 @@
  * - Induction Advisor: AI conversation placeholder
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getRoleForUser } from '../lib/data/participants'
+import { PhaseChangeModal } from '../components/PhaseChangeModal'
 import type { Role, Clan, Phase, SimRun } from '../types/database'
 
 type Tab = 'role' | 'clan' | 'process' | 'materials'
@@ -32,6 +33,12 @@ export function ParticipantDashboard() {
   const [simulation, setSimulation] = useState<SimRun | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Phase change modal state
+  const [showPhaseModal, setShowPhaseModal] = useState(false)
+  const [newPhaseForModal, setNewPhaseForModal] = useState<Phase | null>(null)
+  const [previousPhaseName, setPreviousPhaseName] = useState<string | undefined>()
+  const previousPhaseIdRef = useRef<string | null>(null)
 
   // Load all data
   useEffect(() => {
@@ -101,6 +108,11 @@ export function ParticipantDashboard() {
         if (phasesError) throw phasesError
         setPhases(phasesData || [])
 
+        // Initialize the phase ref with current phase (for detecting changes later)
+        if (simData?.current_phase_id) {
+          previousPhaseIdRef.current = simData.current_phase_id
+        }
+
         setLoading(false)
       } catch (err: any) {
         console.error('Error loading data:', err)
@@ -110,6 +122,86 @@ export function ParticipantDashboard() {
     }
 
     loadData()
+
+    // Set up real-time subscriptions for instant updates
+    const simRunsSubscription = supabase
+      .channel(`sim_runs:${runId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'sim_runs',
+          filter: `run_id=eq.${runId}`,
+        },
+        (payload) => {
+          console.log('Simulation updated:', payload.new)
+          const newSimData = payload.new as SimRun
+
+          // Check if phase changed
+          const newPhaseId = newSimData.current_phase_id
+          const oldPhaseId = previousPhaseIdRef.current
+
+          if (newPhaseId && newPhaseId !== oldPhaseId && oldPhaseId !== null) {
+            // Phase changed! Show modal
+            console.log('🎉 Phase changed!', { from: oldPhaseId, to: newPhaseId })
+
+            // Find the new phase details
+            supabase
+              .from('phases')
+              .select('*')
+              .eq('phase_id', newPhaseId)
+              .single()
+              .then(({ data: phaseData }) => {
+                if (phaseData) {
+                  // Find previous phase name
+                  const prevPhase = phases.find(p => p.phase_id === oldPhaseId)
+
+                  setNewPhaseForModal(phaseData)
+                  setPreviousPhaseName(prevPhase?.name)
+                  setShowPhaseModal(true)
+                }
+              })
+          }
+
+          // Update the ref to track current phase
+          previousPhaseIdRef.current = newPhaseId
+
+          setSimulation(newSimData)
+        }
+      )
+      .subscribe()
+
+    const phasesSubscription = supabase
+      .channel(`phases:${runId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'phases',
+          filter: `run_id=eq.${runId}`,
+        },
+        (payload) => {
+          console.log('Phase updated:', payload)
+          // Reload phases to get fresh data
+          supabase
+            .from('phases')
+            .select('*')
+            .eq('run_id', runId)
+            .order('sequence_number', { ascending: true })
+            .then(({ data }) => {
+              if (data) setPhases(data)
+            })
+        }
+      )
+      .subscribe()
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      simRunsSubscription.unsubscribe()
+      phasesSubscription.unsubscribe()
+    }
   }, [user, runId, navigate])
 
   if (loading) {
@@ -142,6 +234,14 @@ export function ParticipantDashboard() {
   const currentPhase = simulation?.current_phase_id
     ? phases.find(p => p.phase_id === simulation.current_phase_id)
     : null
+
+  // Debug logging
+  console.log('🔍 Participant Dashboard - Current Phase Debug:', {
+    simulation_current_phase_id: simulation?.current_phase_id,
+    phases_count: phases.length,
+    currentPhase_found: !!currentPhase,
+    currentPhase_name: currentPhase?.name
+  })
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,15 +305,41 @@ export function ParticipantDashboard() {
             )}
           </div>
 
-          {/* Status Bar */}
-          <div className="mt-4 flex items-center justify-between bg-neutral-50 rounded-lg px-4 py-2">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-success rounded-full" />
-              <span className="text-sm text-neutral-600">
-                {currentPhase ? `Current Phase: ${currentPhase.phase_name}` : 'Simulation not started'}
-              </span>
+          {/* Current Phase Display - Prominent */}
+          <div className="mt-6">
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl px-6 py-5 border-2 border-amber-200 shadow-md">
+              {currentPhase ? (
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-sm font-medium text-amber-700 uppercase tracking-wider">
+                      Current Phase
+                    </span>
+                  </div>
+                  <h2 className="text-4xl font-heading font-bold text-amber-900 mb-2">
+                    {currentPhase.name}
+                  </h2>
+                  {currentPhase.description && (
+                    <p className="text-lg text-amber-800 leading-relaxed">
+                      {currentPhase.description}
+                    </p>
+                  )}
+                  <div className="mt-3 text-sm text-amber-700">
+                    Duration: {currentPhase.actual_duration_minutes || currentPhase.default_duration_minutes} minutes
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <div className="text-2xl font-heading font-semibold text-amber-800">
+                    Simulation Not Started
+                  </div>
+                  <p className="text-amber-700 mt-2">
+                    Waiting for facilitator to begin...
+                  </p>
+                </div>
+              )}
             </div>
-            <div className="text-sm text-neutral-500">
+            <div className="text-center text-sm text-neutral-500 mt-2">
               {simulation?.run_name}
             </div>
           </div>
@@ -720,6 +846,14 @@ export function ParticipantDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Phase Change Modal */}
+      <PhaseChangeModal
+        isOpen={showPhaseModal}
+        onClose={() => setShowPhaseModal(false)}
+        newPhase={newPhaseForModal}
+        previousPhaseName={previousPhaseName}
+      />
     </div>
   )
 }
