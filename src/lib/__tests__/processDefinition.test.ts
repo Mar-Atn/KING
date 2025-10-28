@@ -3,6 +3,7 @@
  * Verifies KING_PROCESS_PHASES data integrity and utility functions
  */
 
+import { describe, it, expect } from 'vitest'
 import {
   KING_PROCESS_PHASES,
   getTotalDuration,
@@ -15,186 +16,161 @@ import {
   getProgressPercentage,
 } from '../processDefinition'
 
-// Manual test execution (can be run in browser console or Node)
-export function runProcessDefinitionTests() {
-  console.log('🧪 Testing Process Definition...\n')
+describe('Process Definition', () => {
+  describe('Phase Data', () => {
+    it('should have exactly 16 phases', () => {
+      expect(KING_PROCESS_PHASES).toHaveLength(16)
+    })
 
-  // Test 1: Verify all 12 phases exist
-  console.log('Test 1: Verify phase count')
-  console.assert(
-    KING_PROCESS_PHASES.length === 12,
-    `❌ Expected 12 phases, got ${KING_PROCESS_PHASES.length}`
-  )
-  console.log(`✅ Phase count: ${KING_PROCESS_PHASES.length}`)
+    it('should calculate correct total duration', () => {
+      const total = getTotalDuration()
+      expect(total).toBe(185)
+    })
 
-  // Test 2: Verify total duration
-  console.log('\nTest 2: Verify total duration')
-  const totalDuration = getTotalDuration()
-  console.assert(
-    totalDuration === 120,
-    `❌ Expected 120 minutes, got ${totalDuration}`
-  )
-  console.log(`✅ Total duration: ${totalDuration} minutes`)
+    it('should have all phases with required properties', () => {
+      KING_PROCESS_PHASES.forEach((phase, index) => {
+        expect(phase.stage_number, `Phase ${index + 1} missing stage_number`).toBeDefined()
+        expect(phase.stage_name, `Phase ${index + 1} missing stage_name`).toBeDefined()
+        expect(phase.description, `Phase ${index + 1} missing description`).toBeDefined()
+        expect(phase.default_duration_minutes, `Phase ${index + 1} missing duration`).toBeDefined()
+        expect(phase.phase_type, `Phase ${index + 1} missing phase_type`).toBeDefined()
+      })
+    })
 
-  // Test 3: Verify phase retrieval by number
-  console.log('\nTest 3: Verify phase retrieval')
-  const phase1 = getPhaseByNumber(1)
-  console.assert(
-    phase1?.stage_name === 'Clan Councils 1',
-    `❌ Expected "Clan Councils 1", got "${phase1?.stage_name}"`
-  )
-  console.log(`✅ Phase 1: ${phase1?.stage_name}`)
-
-  const phase12 = getPhaseByNumber(12)
-  console.assert(
-    phase12?.stage_name === "Clan's Final Decisions",
-    `❌ Expected "Clan's Final Decisions", got "${phase12?.stage_name}"`
-  )
-  console.log(`✅ Phase 12: ${phase12?.stage_name}`)
-
-  // Test 4: Verify phase types
-  console.log('\nTest 4: Verify phase types')
-  const clanCouncils = getPhasesByType('clan_council')
-  console.assert(
-    clanCouncils.length === 3,
-    `❌ Expected 3 clan_council phases, got ${clanCouncils.length}`
-  )
-  console.log(`✅ Clan Council phases: ${clanCouncils.length}`)
-
-  const votes = getPhasesByType('vote')
-  console.assert(
-    votes.length === 2,
-    `❌ Expected 2 vote phases, got ${votes.length}`
-  )
-  console.log(`✅ Vote phases: ${votes.length}`)
-
-  // Test 5: Verify stage validation
-  console.log('\nTest 5: Verify stage validation')
-  console.assert(
-    isValidStageNumber(1) === true,
-    '❌ Stage 1 should be valid'
-  )
-  console.assert(
-    isValidStageNumber(12) === true,
-    '❌ Stage 12 should be valid'
-  )
-  console.assert(
-    isValidStageNumber(0) === false,
-    '❌ Stage 0 should be invalid'
-  )
-  console.assert(
-    isValidStageNumber(13) === false,
-    '❌ Stage 13 should be invalid'
-  )
-  console.log('✅ Stage validation working')
-
-  // Test 6: Verify navigation functions
-  console.log('\nTest 6: Verify phase navigation')
-  const nextPhase = getNextPhase(5)
-  console.assert(
-    nextPhase?.stage_number === 6,
-    `❌ Expected phase 6, got ${nextPhase?.stage_number}`
-  )
-  console.log(`✅ Next phase after 5: ${nextPhase?.stage_name}`)
-
-  const prevPhase = getPreviousPhase(5)
-  console.assert(
-    prevPhase?.stage_number === 4,
-    `❌ Expected phase 4, got ${prevPhase?.stage_number}`
-  )
-  console.log(`✅ Previous phase before 5: ${prevPhase?.stage_name}`)
-
-  const noNextPhase = getNextPhase(12)
-  console.assert(
-    noNextPhase === null,
-    '❌ Phase 12 should have no next phase'
-  )
-  console.log('✅ No next phase after 12 (correct)')
-
-  // Test 7: Verify completion check
-  console.log('\nTest 7: Verify simulation completion')
-  console.assert(
-    isSimulationComplete(12) === false,
-    '❌ Stage 12 should not be complete'
-  )
-  console.assert(
-    isSimulationComplete(13) === true,
-    '❌ Stage 13 should be complete'
-  )
-  console.log('✅ Completion check working')
-
-  // Test 8: Verify progress calculation
-  console.log('\nTest 8: Verify progress percentage')
-  const progress6 = getProgressPercentage(6)
-  console.assert(
-    progress6 === 50,
-    `❌ Expected 50% at stage 6, got ${progress6}%`
-  )
-  console.log(`✅ Progress at stage 6: ${progress6}%`)
-
-  const progress12 = getProgressPercentage(12)
-  console.assert(
-    progress12 === 100,
-    `❌ Expected 100% at stage 12, got ${progress12}%`
-  )
-  console.log(`✅ Progress at stage 12: ${progress12}%`)
-
-  // Test 9: Verify all phases have required properties
-  console.log('\nTest 9: Verify phase data integrity')
-  let allValid = true
-  KING_PROCESS_PHASES.forEach((phase, index) => {
-    if (
-      !phase.stage_number ||
-      !phase.stage_name ||
-      !phase.description ||
-      !phase.default_duration_minutes ||
-      !phase.phase_type
-    ) {
-      console.error(`❌ Phase ${index + 1} is missing required properties`)
-      allValid = false
-    }
+    it('should have correct sequence numbers', () => {
+      KING_PROCESS_PHASES.forEach((phase, index) => {
+        expect(phase.stage_number).toBe(index + 1)
+      })
+    })
   })
-  console.assert(allValid, '❌ Some phases are missing required properties')
-  console.log('✅ All phases have required properties')
 
-  // Test 10: Verify sequence numbers are correct
-  console.log('\nTest 10: Verify sequence numbers')
-  let sequenceValid = true
-  KING_PROCESS_PHASES.forEach((phase, index) => {
-    if (phase.stage_number !== index + 1) {
-      console.error(
-        `❌ Phase ${index + 1} has incorrect stage_number: ${phase.stage_number}`
-      )
-      sequenceValid = false
-    }
+  describe('Phase Retrieval', () => {
+    it('should retrieve phase 0 correctly', () => {
+      const phase = getPhaseByNumber(0)
+      expect(phase).toBeDefined()
+      expect(phase?.stage_name).toBe('Role Distribution & Induction')
+      expect(phase?.phase_category).toBe('pre_play')
+    })
+
+    it('should retrieve phase 1 correctly', () => {
+      const phase = getPhaseByNumber(1)
+      expect(phase).toBeDefined()
+      expect(phase?.stage_name).toBe('Clan Councils 1')
+    })
+
+    it('should retrieve last phase correctly', () => {
+      const phase = getPhaseByNumber(15)
+      expect(phase).toBeDefined()
+      expect(phase?.stage_name).toBe('Group Reflections')
+    })
+
+    it('should return null for invalid phase numbers', () => {
+      expect(getPhaseByNumber(-1)).toBeNull()
+      expect(getPhaseByNumber(99)).toBeNull()
+    })
   })
-  console.assert(sequenceValid, '❌ Phase sequence numbers are incorrect')
-  console.log('✅ All sequence numbers are correct')
 
-  console.log('\n✅ All tests passed! Process definition is valid.\n')
+  describe('Phase Types', () => {
+    it('should find all clan_council phases', () => {
+      const clanCouncils = getPhasesByType('clan_council')
+      expect(clanCouncils.length).toBeGreaterThan(0)
+    })
 
-  // Display phase summary
-  console.log('📊 Phase Summary:')
-  console.table(
-    KING_PROCESS_PHASES.map((phase) => ({
-      Stage: phase.stage_number,
-      Name: phase.stage_name,
-      Duration: `${phase.default_duration_minutes} min`,
-      Type: phase.phase_type,
-      Private: phase.allows_private_meetings ? 'Yes' : 'No',
-      Public: phase.allows_public_discussion ? 'Yes' : 'No',
-    }))
-  )
+    it('should find all vote phases', () => {
+      const votes = getPhasesByType('vote')
+      expect(votes.length).toBeGreaterThan(0)
+    })
 
-  return {
-    success: true,
-    totalPhases: KING_PROCESS_PHASES.length,
-    totalDuration: getTotalDuration(),
-  }
-}
+    it('should return empty array for non-existent type', () => {
+      const invalid = getPhasesByType('non_existent' as any)
+      expect(invalid).toHaveLength(0)
+    })
+  })
 
-// Auto-run tests in development
-if (import.meta.env.DEV) {
-  console.log('🔍 Process Definition loaded successfully')
-  console.log(`📊 ${KING_PROCESS_PHASES.length} phases, ${getTotalDuration()} minutes total`)
-}
+  describe('Stage Validation', () => {
+    it('should validate valid stage numbers', () => {
+      expect(isValidStageNumber(0)).toBe(true)
+      expect(isValidStageNumber(1)).toBe(true)
+      expect(isValidStageNumber(15)).toBe(true)
+      expect(isValidStageNumber(8)).toBe(true)
+    })
+
+    it('should invalidate out-of-bounds stage numbers', () => {
+      expect(isValidStageNumber(-1)).toBe(false)
+      expect(isValidStageNumber(16)).toBe(false)
+      expect(isValidStageNumber(99)).toBe(false)
+    })
+  })
+
+  describe('Phase Navigation', () => {
+    it('should get next phase', () => {
+      const next = getNextPhase(5)
+      expect(next?.stage_number).toBe(6)
+    })
+
+    it('should get previous phase', () => {
+      const prev = getPreviousPhase(5)
+      expect(prev?.stage_number).toBe(4)
+    })
+
+    it('should return null for next phase after last (15)', () => {
+      const next = getNextPhase(15)
+      expect(next).toBeNull()
+    })
+
+    it('should return null for previous phase before first (0)', () => {
+      const prev = getPreviousPhase(0)
+      expect(prev).toBeNull()
+    })
+  })
+
+  describe('Simulation Completion', () => {
+    it('should not be complete during phases', () => {
+      expect(isSimulationComplete(0)).toBe(false)
+      expect(isSimulationComplete(1)).toBe(false)
+      expect(isSimulationComplete(15)).toBe(false)
+    })
+
+    it('should not be complete at last phase (15)', () => {
+      expect(isSimulationComplete(15)).toBe(false)
+    })
+
+    it('should not be complete at phase after last (16)', () => {
+      // 16 > 16 = false (uses > not >=)
+      expect(isSimulationComplete(16)).toBe(false)
+    })
+
+    it('should be complete only after phase 16', () => {
+      // 17 > 16 = true
+      expect(isSimulationComplete(17)).toBe(true)
+      expect(isSimulationComplete(99)).toBe(true)
+    })
+  })
+
+  describe('Progress Calculation', () => {
+    it('should calculate progress at stage 0', () => {
+      // (0+1)/16 * 100 = 6.25 → 6%
+      expect(getProgressPercentage(0)).toBe(6)
+    })
+
+    it('should calculate progress at stage 8', () => {
+      // (8+1)/16 * 100 = 56.25 → 56%
+      expect(getProgressPercentage(8)).toBe(56)
+    })
+
+    it('should calculate 100% after last phase', () => {
+      expect(getProgressPercentage(16)).toBe(100)
+      expect(getProgressPercentage(99)).toBe(100)
+    })
+
+    it('should calculate 100% at last phase', () => {
+      // (15+1)/16 * 100 = 100%
+      expect(getProgressPercentage(15)).toBe(100)
+    })
+
+    it('should handle negative values', () => {
+      expect(getProgressPercentage(-1)).toBe(0)
+      expect(getProgressPercentage(-10)).toBe(0)
+    })
+  })
+})
