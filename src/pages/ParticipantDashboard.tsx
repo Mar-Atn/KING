@@ -4,8 +4,8 @@
  * Main participant interface after role confirmation:
  * - My Role: Character details, background, traits, interests
  * - My Clan: Clan info, members, other clans overview
- * - Process Overview: Phases and current status
- * - Printable Materials: Link to printable brief
+ * - Election Process: Sacred tradition phases with voting requirements
+ * - Our Glorious City: Kourion context, King's decisions, strategic setting
  * - Induction Advisor: AI conversation placeholder
  */
 
@@ -27,6 +27,7 @@ export function ParticipantDashboard() {
   const [role, setRole] = useState<Role | null>(null)
   const [clanMembers, setClanMembers] = useState<Role[]>([])
   const [allClans, setAllClans] = useState<Clan[]>([])
+  const [allRoles, setAllRoles] = useState<Role[]>([])
   const [phases, setPhases] = useState<Phase[]>([])
   const [simulation, setSimulation] = useState<SimRun | null>(null)
   const [loading, setLoading] = useState(true)
@@ -80,6 +81,15 @@ export function ParticipantDashboard() {
 
         if (clansError) throw clansError
         setAllClans(clansData || [])
+
+        // Get all roles for this simulation (to count clan members)
+        const { data: allRolesData, error: allRolesError } = await supabase
+          .from('roles')
+          .select('*')
+          .eq('run_id', runId)
+
+        if (allRolesError) throw allRolesError
+        setAllRoles(allRolesData || [])
 
         // Get all phases for this simulation
         const { data: phasesData, error: phasesError } = await supabase
@@ -176,30 +186,20 @@ export function ParticipantDashboard() {
 
             {/* Clan Badge */}
             {clanData && (
-              <div
-                className="px-4 py-3 rounded-lg border-2"
-                style={{
-                  borderColor: clanData.color_hex || '#8B7355',
-                  backgroundColor: `${clanData.color_hex || '#8B7355'}15`
-                }}
-              >
+              <div className="flex items-center gap-3">
                 {clanData.emblem_url && (
                   <img
                     src={clanData.emblem_url}
                     alt={clanData.name}
-                    className="w-12 h-12 object-contain mx-auto mb-1"
+                    className="w-24 h-24 rounded-full object-cover border-4 shadow-lg"
+                    style={{ borderColor: clanData.color_hex || '#8B7355' }}
                   />
                 )}
-                <div className="text-center">
-                  <div className="text-xs text-neutral-600 uppercase tracking-wide">
-                    Clan
-                  </div>
-                  <div
-                    className="text-xl font-heading font-bold"
-                    style={{ color: clanData.color_hex }}
-                  >
-                    {clanData.name}
-                  </div>
+                <div
+                  className="text-2xl font-heading font-bold"
+                  style={{ color: clanData.color_hex }}
+                >
+                  {clanData.name}
                 </div>
               </div>
             )}
@@ -252,7 +252,7 @@ export function ParticipantDashboard() {
                   : 'border-transparent text-neutral-600 hover:text-primary'
               }`}
             >
-              Process Overview
+              Election Process
             </button>
             <button
               onClick={() => setActiveTab('materials')}
@@ -262,7 +262,7 @@ export function ParticipantDashboard() {
                   : 'border-transparent text-neutral-600 hover:text-primary'
               }`}
             >
-              Printable Materials
+              Our Glorious City
             </button>
           </div>
         </div>
@@ -412,7 +412,7 @@ export function ParticipantDashboard() {
                                 <img
                                   src={clan.emblem_url}
                                   alt={clan.name}
-                                  className="w-8 h-8 object-contain"
+                                  className="w-8 h-8 rounded-full object-cover"
                                 />
                               )}
                               <div className="flex-1">
@@ -437,107 +437,205 @@ export function ParticipantDashboard() {
               </div>
             )}
 
-            {/* Tab: Process Overview */}
+            {/* Tab: Election Process */}
             {activeTab === 'process' && (
               <div className="space-y-6">
-                <h2 className="font-heading text-2xl text-primary">Simulation Process</h2>
+                <h2 className="font-heading text-2xl text-primary">
+                  Election of the New King (Sacred Tradition)
+                </h2>
 
                 <div className="bg-white rounded-lg border-2 border-neutral-200 p-6">
-                  <h3 className="font-heading text-lg text-primary mb-4">Phases</h3>
-                  <div className="space-y-4">
-                    {phases.map((phase, index) => {
-                      const isCurrent = phase.phase_id === simulation?.current_phase_id
-                      const isPast = simulation?.current_phase_id
-                        ? phases.findIndex(p => p.phase_id === simulation.current_phase_id) > index
-                        : false
+                  <p className="text-neutral-600 italic mb-6">
+                    According to the ancient traditions of Kourion, the election of a new King follows a sacred process
+                    that ensures wisdom, fairness, and the will of the noble clans.
+                  </p>
+
+                  <div className="space-y-3">
+                    {phases.slice(1, 13).map((phase, idx) => {
+                      const phaseNumber = idx + 1
+                      const phaseName = phase.name.toLowerCase()
+
+                      // Calculate voting requirements
+                      let votingReq = ''
+                      if (phaseName.includes('vote')) {
+                        let voteNumber: 1 | 2 = 1
+
+                        if (phaseName.includes('vote 1') || phaseName.includes('first')) {
+                          voteNumber = 1
+                        } else if (phaseName.includes('vote 2') || phaseName.includes('second')) {
+                          voteNumber = 2
+                        } else {
+                          const votesBeforeThisOne = phases.slice(1, idx + 1).filter(p =>
+                            p.name.toLowerCase().includes('vote') && p.sequence_number < phase.sequence_number
+                          ).length
+                          voteNumber = votesBeforeThisOne === 0 ? 1 : 2
+                        }
+
+                        const totalVotes = simulation?.total_participants || 0
+                        const defaultThreshold = Math.ceil(totalVotes * 2 / 3)
+                        const votesNeeded = voteNumber === 1
+                          ? (simulation?.vote_1_threshold || defaultThreshold)
+                          : (simulation?.vote_2_threshold || defaultThreshold)
+
+                        votingReq = ` — ${votesNeeded} votes out of ${totalVotes} needed`
+                      }
+
+                      const duration = phase.default_duration_minutes
+                        ? ` (${phase.default_duration_minutes} minutes)`
+                        : ''
 
                       return (
                         <div
                           key={phase.phase_id}
-                          className={`p-4 rounded-lg border-2 ${
-                            isCurrent
-                              ? 'border-primary bg-primary bg-opacity-5'
-                              : isPast
-                              ? 'border-neutral-300 bg-neutral-50'
-                              : 'border-neutral-200'
-                          }`}
+                          className="p-4 rounded-lg bg-neutral-50 border-l-4 border-primary"
                         >
-                          <div className="flex items-start gap-3">
-                            <div
-                              className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                                isCurrent
-                                  ? 'bg-primary text-white'
-                                  : isPast
-                                  ? 'bg-neutral-400 text-white'
-                                  : 'bg-neutral-200 text-neutral-600'
-                              }`}
-                            >
-                              {index + 1}
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-heading font-medium text-neutral-900">
-                                  {phase.phase_name}
-                                </h4>
-                                {isCurrent && (
-                                  <span className="px-2 py-0.5 bg-primary text-white text-xs rounded-full">
-                                    Current
-                                  </span>
-                                )}
-                              </div>
-                              {phase.description && (
-                                <p className="text-sm text-neutral-600">{phase.description}</p>
-                              )}
-                              {phase.duration_minutes && (
-                                <p className="text-xs text-neutral-500 mt-1">
-                                  Duration: {phase.duration_minutes} minutes
-                                </p>
-                              )}
-                            </div>
-                          </div>
+                          <h3 className="font-heading font-medium text-neutral-900 mb-1">
+                            Phase {phaseNumber}: {phase.name}{duration}{votingReq}
+                          </h3>
+                          {phase.description && (
+                            <p className="text-sm text-neutral-600">{phase.description}</p>
+                          )}
                         </div>
                       )
                     })}
                   </div>
+
+                  <p className="text-neutral-600 italic mt-6">
+                    Through this time-honored process, the noble citizens of Kourion shall choose their new sovereign.
+                  </p>
                 </div>
               </div>
             )}
 
-            {/* Tab: Printable Materials */}
+            {/* Tab: Our Glorious City */}
             {activeTab === 'materials' && (
               <div className="space-y-6">
-                <h2 className="font-heading text-2xl text-primary">Printable Materials</h2>
+                <h2 className="font-heading text-2xl text-primary">Our Glorious City of Kourion</h2>
 
-                <div className="bg-white rounded-lg border-2 border-neutral-200 p-8 text-center">
-                  <div className="w-20 h-20 mx-auto mb-4 bg-primary bg-opacity-10 rounded-full flex items-center justify-center">
-                    <svg
-                      className="w-10 h-10 text-primary"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                      />
-                    </svg>
+                <div className="bg-white rounded-lg border-2 border-neutral-200 p-6">
+                  {/* Main Context */}
+                  <div className="bg-primary bg-opacity-5 border-l-4 border-primary p-4 mb-6">
+                    <h3 className="font-heading text-xl text-primary mb-3">Kourion Needs a New KING!</h3>
+                    <div className="space-y-3 text-neutral-700 leading-relaxed">
+                      <p>
+                        Ancient Cyprus, 5th-4th century BCE. Cyprus is a strategic island crossroads of Greek, Phoenician, and Persian civilizations.
+                        Three city-kingdoms (Kourion, Kition, Salamis) are on the brink of conflict. External threats loom from Egyptian, Persian,
+                        and Assyrian powers, as well as pirates getting out of control.
+                      </p>
+                      <p>
+                        The mighty city-kingdom of Kourion has lost its King without a heir. You are the noble citizens of Kourion, representing
+                        the most noble families belonging to one of the major clans. You gather here today to elect a new supreme ruler, following
+                        the ancient sacred tradition.
+                      </p>
+                      <p>
+                        The Kingdom shall not remain without a King. If the King is not elected today - turmoil and unrest might start among
+                        ordinary citizens, who can not imagine life without a legitimate King, and enemies will not hesitate to use their chance
+                        and take control of our glorious city.
+                      </p>
+                    </div>
                   </div>
 
-                  <h3 className="font-heading text-xl text-primary mb-2">
-                    Your Character Brief
-                  </h3>
-                  <p className="text-neutral-600 mb-6">
-                    Access a printable version of your character information, clan details, and process overview.
-                  </p>
+                  {/* King's Main Decisions */}
+                  <div className="mb-6">
+                    <h3 className="font-heading text-lg text-primary mb-3">King's Main Decisions</h3>
+                    <p className="text-neutral-700 mb-3">
+                      Once elected the new King will have lifelong powers as supreme ruler of our glorious city. His first order is expected
+                      to have these decisions:
+                    </p>
+                    <ol className="space-y-2 text-neutral-700 list-decimal list-inside">
+                      <li>
+                        <strong>Taxes (next year):</strong> the King must decide on taxes for Agriculture, Trade, Banking and Craft, setting
+                        each lower, higher or keeping as is.
+                      </li>
+                      <li>
+                        <strong>Budget (next year):</strong> the King will set Priority #1, Priority #2 and Priority #3, each one selected
+                        out of 6 priorities: defense, culture, agriculture, banking, trade, craft
+                      </li>
+                      <li>
+                        <strong>Appointments:</strong> The King will appoint his <em>Economic Advisor</em> and <em>Senior Judge</em>
+                      </li>
+                      <li>
+                        <strong>International Affairs:</strong> The King can declare New Alliances (with Salamis or Kition) or declare War
+                        (Salamis, Kition, Egypt, Assyria, Pirates)
+                      </li>
+                      <li>
+                        <strong>Other King's decisions:</strong> as the supreme ruler the King can reward, appoint, arrest, send to exile...
+                      </li>
+                    </ol>
+                  </div>
 
-                  <button
-                    onClick={() => window.open(`/printable-materials/${runId}/${role.role_id}`, '_blank')}
-                    className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-opacity-90 transition-all"
-                  >
-                    Open Printable Materials
-                  </button>
+                  {/* General Interests */}
+                  <div className="mb-6">
+                    <h3 className="font-heading text-lg text-primary mb-3">General Interests</h3>
+                    <p className="text-neutral-700">
+                      For every noble citizen, becoming the King is the highest honour. Becoming one of the two senior King's Advisors is also
+                      a great privilege. Each clan's strongest interest is to promote its candidate to become the new King or, at minimum, one
+                      of the two senior King's Advisors. If another clan's representative becomes the King, each clan wants its legitimate clan
+                      interests reflected in the King's agenda. There is a high risk for any clan if it falls out of favour with the new King.
+                      Once new King is elected each Clan has to take the oath of allegiance to the new King, and also can make final decisions
+                      or statements
+                    </p>
+                  </div>
+
+                  {/* Strategic Setting */}
+                  <div className="mb-6">
+                    <h3 className="font-heading text-lg text-primary mb-3">Strategic Setting</h3>
+                    <ul className="space-y-2 text-neutral-700 list-disc list-inside">
+                      <li>
+                        <strong>Key Rivals in Cyprus:</strong> Kition (Phoenician-influenced, trade and wealth oriented, culturally different)
+                        and Salamis (strong military, close cultural kinship)
+                      </li>
+                      <li>
+                        <strong>Economic Foundations:</strong> Maritime trade; Grain, wine, olive oil production; Strategic Harbors critical
+                        for naval defense and commerce.
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Clans Overview */}
+                  <div>
+                    <h3 className="font-heading text-lg text-primary mb-3">The Noble Clans of Kourion</h3>
+                    <p className="text-neutral-700 mb-4">
+                      <strong>There are {allClans.length} clans in Kourion:</strong>
+                    </p>
+                    <div className="space-y-2">
+                      {allClans.map((clan) => {
+                        const clanSize = allRoles.filter(r => r.clan_id === clan.clan_id).length
+                        return (
+                          <div
+                            key={clan.clan_id}
+                            className={`flex items-center justify-between p-3 rounded-lg border-2 ${
+                              clan.clan_id === role.clan_id
+                                ? 'border-primary bg-primary bg-opacity-5'
+                                : 'border-neutral-200 bg-neutral-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {clan.emblem_url && (
+                                <img
+                                  src={clan.emblem_url}
+                                  alt={clan.name}
+                                  className="w-12 h-12 rounded-full object-cover border-2"
+                                  style={{ borderColor: clan.color_hex || '#8B7355' }}
+                                />
+                              )}
+                              <span className="font-heading font-medium" style={{ color: clan.color_hex || '#8B7355' }}>
+                                {clan.name}
+                              </span>
+                              {clan.clan_id === role.clan_id && (
+                                <span className="px-2 py-0.5 bg-primary text-white text-xs rounded-full">
+                                  Your Clan
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-sm text-neutral-600">
+                              {clanSize} {clanSize === 1 ? 'member' : 'members'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

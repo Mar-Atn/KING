@@ -782,8 +782,8 @@ export function PrintableMaterials() {
                   that ensures wisdom, fairness, and the will of the noble clans.
                 </p>
 
-                {phases.slice(1, 12).map((phase, idx) => {
-                  const stageNumber = idx + 1
+                {phases.slice(1, 13).map((phase, idx) => {
+                  const phaseNumber = idx + 1
                   const phaseName = phase.name.toLowerCase()
 
                   // Detect which vote this is
@@ -813,7 +813,7 @@ export function PrintableMaterials() {
                   return (
                     <div key={phase.sequence_number} className="process-stage">
                       <h3 style={{ marginBottom: '1mm', fontSize: '11pt' }}>
-                        Stage {stageNumber}: {phase.name}{duration}{votingReq}
+                        Phase {phaseNumber}: {phase.name}{duration}{votingReq}
                       </h3>
                       {phase.description && (
                         <p style={{ marginTop: '1mm', fontSize: '9pt' }}>{phase.description}</p>
