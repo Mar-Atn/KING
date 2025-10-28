@@ -22,3 +22,39 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables (contains secrets)
+.env
+.env.local
+.env*.local
+
+# Claude Code conversation history
+.claude/
+
+# Old/archived files
+OLD/
+
+# Test coverage reports
+coverage/
+.nyc_output/
+
+# Test results
+test-results/
+playwright-report/
+
+# Build artifacts
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/

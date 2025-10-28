@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background circle with clan color -->
+  <circle cx="50" cy="50" r="50" fill="#4B0082"/>
+
+  <!-- Lighter overlay -->
+  <circle cx="50" cy="50" r="50" fill="rgba(255, 255, 255, 0.1)"/>
+
+  <!-- Initials -->
+  <text
+    x="50"
+    y="50"
+    font-family="Arial, sans-serif"
+    font-size="32"
+    font-weight="bold"
+    fill="white"
+    text-anchor="middle"
+    dominant-baseline="central"
+  >
+    RL
+  </text>
+</svg>

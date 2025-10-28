@@ -1,0 +1,14 @@
+# Clan of Artificers
+
+## About the Clan
+Our clan represents the ingenuity and innovation that drive the progress of Kourion. We are skilled in creating both military and civil innovations that enhance the city-kingdom's defenses, infrastructure, and daily life. We believe in the power of technology and scientific advancement to solve problems and improve society. Our inventions have played a crucial role in past naval battles and in maintaining the island's prosperity and safety. The future of Kourion depends on embracing progress and innovation, particularly in maritime technologies and harbor engineering.
+
+## Key Priorities
+The best King must be a visionary leader who supports technological advancement and invests in innovation. Our candidate should push for a substantial portion of the budget to be allocated to Research and Development, Infrastructure Improvement, and Naval Innovations. We need to prioritize projects that enhance the island's coastal defenses, improve its harbors and shipyards, and elevate its status among rival city-kingdoms through superior maritime technology.
+An alliance with Kition is desirable for us, as their progressive culture and access to Persian and Phoenician innovations align with our goals of technological advancement. Their diverse knowledge from different cultures could enhance our engineering capabilities. However, we are also open to cooperating with Salamis if they support our engineering projects, especially those related to naval defense. We should oppose any decisions that cut funding for innovation or overly prioritize military expenditure at the expense of technological growth.
+
+## Attitude to Other Clans
+We respect the Military Clan for their understanding of the practical applications of our innovations, especially in naval warfare and coastal defense. The Merchants are valuable partners as they can help fund our projects and provide access to new materials and technologies from distant lands. The Bankers can provide necessary financing for large-scale engineering projects, though we must ensure they understand the long-term benefits of innovation investments. The Landlords can benefit from our agricultural innovations, but their resistance to change sometimes limits our ability to implement improvements. The Philosophers can offer valuable insights into the ethical implications of our innovations, but their theoretical approach sometimes conflicts with our practical focus.
+
+## If Things Go Wrong
+If the King fails to support innovation or cuts funding for our projects, we could consider withholding our technical expertise, potentially leaving the city-kingdom vulnerable to technological stagnation. We might also seek support from foreign powers that value innovation, such as Persian engineers or Phoenician shipbuilders, though this would be a last resort that could compromise our loyalty to Kourion. 

@@ -1,0 +1,182 @@
+[
+  {
+    "sequence": 1,
+    "name": "Architekton Metrodoros Tekhnaios",
+    "clan": "Artificers",
+    "avatar_url": "/avatars/avatar-1.svg"
+  },
+  {
+    "sequence": 2,
+    "name": "Sophia Hephaistia Polymechanikos",
+    "clan": "Artificers",
+    "avatar_url": "/avatars/avatar-2.svg"
+  },
+  {
+    "sequence": 3,
+    "name": "Mekhanopoios Thales Nautilos",
+    "clan": "Artificers",
+    "avatar_url": "/avatars/avatar-3.svg"
+  },
+  {
+    "sequence": 4,
+    "name": "Trapezites Demetrios Chrysostomos",
+    "clan": "Bankers",
+    "avatar_url": "/avatars/avatar-4.svg"
+  },
+  {
+    "sequence": 5,
+    "name": "Kyria Antigone Oikonomos",
+    "clan": "Bankers",
+    "avatar_url": "/avatars/avatar-5.svg"
+  },
+  {
+    "sequence": 6,
+    "name": "Kyria Lyra Theodoros",
+    "clan": "Bankers",
+    "avatar_url": "/avatars/avatar-6.svg"
+  },
+  {
+    "sequence": 7,
+    "name": "Argentarius Nikandros Nomismatikos",
+    "clan": "Bankers",
+    "avatar_url": "/avatars/avatar-7.svg"
+  },
+  {
+    "sequence": 8,
+    "name": "Trapezitria Iris Chrematistes",
+    "clan": "Bankers",
+    "avatar_url": "/avatars/avatar-8.svg"
+  },
+  {
+    "sequence": 9,
+    "name": "Archon Apollodoros Kourionides",
+    "clan": "Landlords",
+    "avatar_url": "/avatars/avatar-9.svg"
+  },
+  {
+    "sequence": 10,
+    "name": "Kyria Alexandra Gerontos",
+    "clan": "Landlords",
+    "avatar_url": "/avatars/avatar-10.svg"
+  },
+  {
+    "sequence": 11,
+    "name": "Strategos Timotheos Hoplites",
+    "clan": "Landlords",
+    "avatar_url": "/avatars/avatar-11.svg"
+  },
+  {
+    "sequence": 12,
+    "name": "Kyrios Philippos Agronomos",
+    "clan": "Landlords",
+    "avatar_url": "/avatars/avatar-12.svg"
+  },
+  {
+    "sequence": 13,
+    "name": "Despoina Theodora Ktemates",
+    "clan": "Landlords",
+    "avatar_url": "/avatars/avatar-13.svg"
+  },
+  {
+    "sequence": 14,
+    "name": "Archon Herakles Geouchikos",
+    "clan": "Landlords",
+    "avatar_url": "/avatars/avatar-14.svg"
+  },
+  {
+    "sequence": 15,
+    "name": "Georgios Agronakis",
+    "clan": "Landlords",
+    "avatar_url": "/avatars/avatar-15.svg"
+  },
+  {
+    "sequence": 16,
+    "name": "Navarch Theodoros Phoenikiades",
+    "clan": "Merchants",
+    "avatar_url": "/avatars/avatar-16.svg"
+  },
+  {
+    "sequence": 17,
+    "name": "Emporios Helena Kypriades",
+    "clan": "Merchants",
+    "avatar_url": "/avatars/avatar-17.svg"
+  },
+  {
+    "sequence": 18,
+    "name": "Nauplios Kyros Salaminiades",
+    "clan": "Merchants",
+    "avatar_url": "/avatars/avatar-18.svg"
+  },
+  {
+    "sequence": 19,
+    "name": "Emporios Zeno Panhellenios",
+    "clan": "Merchants",
+    "avatar_url": "/avatars/avatar-19.svg"
+  },
+  {
+    "sequence": 20,
+    "name": "Naukleros Kallisto Thalassopoula",
+    "clan": "Merchants",
+    "avatar_url": "/avatars/avatar-20.svg"
+  },
+  {
+    "sequence": 21,
+    "name": "Strategos Nikias Korragos",
+    "clan": "Military",
+    "avatar_url": "/avatars/avatar-21.svg"
+  },
+  {
+    "sequence": 22,
+    "name": "Captain Lysander Heraklidos",
+    "clan": "Military",
+    "avatar_url": "/avatars/avatar-22.svg"
+  },
+  {
+    "sequence": 23,
+    "name": "Commander Demetrios Alkibiades",
+    "clan": "Military",
+    "avatar_url": "/avatars/avatar-23.svg"
+  },
+  {
+    "sequence": 24,
+    "name": "Admiral Kleomenes Thalassios",
+    "clan": "Military",
+    "avatar_url": "/avatars/avatar-24.svg"
+  },
+  {
+    "sequence": 25,
+    "name": "Lieutenant Andreas Polemistes",
+    "clan": "Military",
+    "avatar_url": "/avatars/avatar-25.svg"
+  },
+  {
+    "sequence": 26,
+    "name": "Hoplite Commander Philon Aspidos",
+    "clan": "Military",
+    "avatar_url": "/avatars/avatar-26.svg"
+  },
+  {
+    "sequence": 27,
+    "name": "Strategos Kassandra Polemarch",
+    "clan": "Military",
+    "avatar_url": "/avatars/avatar-27.svg"
+  },
+  {
+    "sequence": 28,
+    "name": "Philosophos Sokrates Ethikos",
+    "clan": "Philosophers",
+    "avatar_url": "/avatars/avatar-28.svg"
+  },
+  {
+    "sequence": 29,
+    "name": "Didaskalos Aristoteles Politikos",
+    "clan": "Philosophers",
+    "avatar_url": "/avatars/avatar-29.svg"
+  },
+  {
+    "sequence": 30,
+    "name": "Rhetor Kalliope Logike",
+    "clan": "Philosophers",
+    "avatar_url": "/avatars/avatar-30.svg"
+  }
+]

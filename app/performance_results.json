@@ -1,0 +1,106 @@
+{
+  "timestamp": "2025-10-28T13:23:26.204Z",
+  "environment": "production",
+  "supabaseProject": "esplzaunxkehuankkwbx",
+  "results": [
+    {
+      "operation": "SELECT all simulations",
+      "executionTime": 422.925375,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT single simulation by ID",
+      "executionTime": 126.37295900000004,
+      "rowCount": 0,
+      "hasRLS": true,
+      "error": "Cannot coerce the result to a single JSON object"
+    },
+    {
+      "operation": "COUNT simulations",
+      "executionTime": 105.69220899999993,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT simulations with clans",
+      "executionTime": 106.36316699999998,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT simulations with phases",
+      "executionTime": 135.80075,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT simulations with clans and roles",
+      "executionTime": 118.29954200000009,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT complete simulation data",
+      "executionTime": 110.959834,
+      "rowCount": 0,
+      "hasRLS": true,
+      "error": "Could not find a relationship between 'sim_runs' and 'users' in the schema cache"
+    },
+    {
+      "operation": "SELECT all users",
+      "executionTime": 103.37850000000003,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT user with role filter",
+      "executionTime": 103.0702080000001,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT clans (RLS filtered)",
+      "executionTime": 113.30041599999981,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT roles (RLS filtered)",
+      "executionTime": 119.24591699999996,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT roles with clans (RLS + join)",
+      "executionTime": 106.85404100000005,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT meetings",
+      "executionTime": 112.71100000000001,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT vote sessions",
+      "executionTime": 114.05100000000016,
+      "rowCount": 0,
+      "hasRLS": true
+    },
+    {
+      "operation": "SELECT votes with results",
+      "executionTime": 108.83037499999978,
+      "rowCount": 0,
+      "hasRLS": true,
+      "error": "Could not find a relationship between 'votes' and 'vote_results' in the schema cache"
+    }
+  ],
+  "summary": {
+    "totalQueries": 15,
+    "successful": 12,
+    "failed": 3,
+    "averageTime": 138.47434375
+  }
+}
