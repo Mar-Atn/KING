@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { usePhaseStore } from '../stores/phaseStore'
 import { usePhaseSync } from '../hooks/usePhaseSync'
 import { PhaseControls } from '../components/PhaseControls'
+import { VotingControls } from '../components/voting/VotingControls'
 import type { SimRun, Clan, Role } from '../types/database'
 
 export function FacilitatorSimulation() {
@@ -44,6 +45,160 @@ export function FacilitatorSimulation() {
     }
   }
 
+  // Re-Start simulation - reset to beginning and clean all data
+  const handleRestartSimulation = async () => {
+    if (!runId) return
+
+    const confirmed = window.confirm(
+      '⚠️ WARNING: This will RESET the entire simulation to the beginning!\n\n' +
+      'This will:\n' +
+      '• Delete ALL votes and voting sessions\n' +
+      '• Delete ALL meeting records\n' +
+      '• Delete ALL event logs\n' +
+      '• Reset ALL phases to "pending" status\n' +
+      '• Clear current phase\n\n' +
+      'Participant role assignments will be preserved.\n\n' +
+      'This action cannot be undone. Continue?'
+    )
+
+    if (!confirmed) return
+
+    // Double confirmation for safety
+    const doubleConfirmed = window.confirm(
+      '⚠️ FINAL CONFIRMATION\n\n' +
+      'Are you absolutely sure you want to restart this simulation?\n\n' +
+      'Click OK to proceed with the reset.'
+    )
+
+    if (!doubleConfirmed) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      console.log('🔄 Starting simulation restart...')
+
+      // First, get all vote session IDs for this run
+      const { data: voteSessions } = await supabase
+        .from('vote_sessions')
+        .select('session_id')
+        .eq('run_id', runId)
+
+      const sessionIds = voteSessions?.map(s => s.session_id) || []
+
+      // Get all meeting IDs for this run
+      const { data: meetingData } = await supabase
+        .from('meetings')
+        .select('meeting_id')
+        .eq('run_id', runId)
+
+      const meetingIds = meetingData?.map(m => m.meeting_id) || []
+
+      // 1. Delete all votes (if any sessions exist)
+      if (sessionIds.length > 0) {
+        const { error: votesError } = await supabase
+          .from('votes')
+          .delete()
+          .in('session_id', sessionIds)
+
+        if (votesError) {
+          console.warn('Error deleting votes:', votesError)
+        }
+      }
+
+      // 2. Delete all vote results (if any sessions exist)
+      if (sessionIds.length > 0) {
+        const { error: resultsError } = await supabase
+          .from('vote_results')
+          .delete()
+          .in('session_id', sessionIds)
+
+        if (resultsError) {
+          console.warn('Error deleting vote results:', resultsError)
+        }
+      }
+
+      // 3. Delete all vote sessions
+      const { error: sessionsError } = await supabase
+        .from('vote_sessions')
+        .delete()
+        .eq('run_id', runId)
+
+      if (sessionsError) throw sessionsError
+
+      // 4. Delete all meeting invitations (if any meetings exist)
+      if (meetingIds.length > 0) {
+        const { error: invitesError } = await supabase
+          .from('meeting_invitations')
+          .delete()
+          .in('meeting_id', meetingIds)
+
+        if (invitesError) {
+          console.warn('Error deleting meeting invitations:', invitesError)
+        }
+      }
+
+      // 5. Delete all meetings
+      const { error: meetingsError } = await supabase
+        .from('meetings')
+        .delete()
+        .eq('run_id', runId)
+
+      if (meetingsError) {
+        console.warn('Error deleting meetings:', meetingsError)
+      }
+
+      // 6. Delete all event logs
+      const { error: eventsError } = await supabase
+        .from('event_log')
+        .delete()
+        .eq('run_id', runId)
+
+      if (eventsError) {
+        console.warn('Error deleting event logs:', eventsError)
+      }
+
+      // 7. Reset all phases to pending
+      const { error: phasesError } = await supabase
+        .from('phases')
+        .update({
+          status: 'pending',
+          started_at: null,
+          ended_at: null
+        })
+        .eq('run_id', runId)
+
+      if (phasesError) throw phasesError
+
+      // 8. Reset simulation status
+      const { error: simError } = await supabase
+        .from('sim_runs')
+        .update({
+          status: 'setup',
+          current_phase_id: null,
+          started_at: null,
+          completed_at: null
+        })
+        .eq('run_id', runId)
+
+      if (simError) throw simError
+
+      console.log('✅ Simulation restart complete')
+
+      // Reload all data
+      await loadSimulation()
+
+      alert('✅ Simulation has been reset to the beginning!\n\nYou can now start from Phase 1.')
+
+    } catch (err: any) {
+      console.error('Error restarting simulation:', err)
+      setError(err.message || 'Failed to restart simulation')
+      alert(`❌ Error: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Load simulation data
   const loadSimulation = async () => {
     if (!runId) return
@@ -52,28 +207,44 @@ export function FacilitatorSimulation() {
     setError(null)
 
     try {
+      console.log('⏱️  [FacilitatorSimulation] Starting load...')
+      const loadStart = Date.now()
+
       // ✅ Execute all 3 queries in PARALLEL using Promise.all
+      console.log('   📍 Step 1: Fetching parallel queries...')
+      const parallelStart = Date.now()
+
+      // Track individual query times
+      const simStart = Date.now()
+      const simPromise = supabase
+        .from('sim_runs')
+        .select('run_id, run_name, version, status, created_at, started_at, completed_at, facilitator_id, current_phase_id, total_participants, human_participants, ai_participants, notes, learning_objectives, vote_1_threshold, vote_2_threshold')
+        .eq('run_id', runId)
+        .single()
+        .then(r => { console.log(`      sim_runs: ${Date.now() - simStart}ms`); return r })
+
+      const clansStart = Date.now()
+      const clansPromise = supabase
+        .from('clans')
+        .select('*')
+        .eq('run_id', runId)
+        .order('sequence_number', { ascending: true })
+        .then(r => { console.log(`      clans: ${Date.now() - clansStart}ms`); return r })
+
+      const rolesStart = Date.now()
+      const rolesPromise = supabase
+        .from('roles')
+        .select('role_id, run_id, clan_id, participant_type, assigned_user_id, name, age, position, avatar_url, status, created_at')
+        .eq('run_id', runId)
+        .then(r => { console.log(`      roles: ${Date.now() - rolesStart}ms`); return r })
+
       const [simResult, clansResult, rolesResult] = await Promise.all([
-        // Query 1: Load sim_run
-        supabase
-          .from('sim_runs')
-          .select('*')
-          .eq('run_id', runId)
-          .single(),
-
-        // Query 2: Load clans (runs in parallel with Query 1)
-        supabase
-          .from('clans')
-          .select('*')
-          .eq('run_id', runId)
-          .order('sequence_number', { ascending: true }),
-
-        // Query 3: Load roles (runs in parallel with Query 1 & 2)
-        supabase
-          .from('roles')
-          .select('*')
-          .eq('run_id', runId),
+        simPromise,
+        clansPromise,
+        rolesPromise
       ])
+
+      console.log(`   ✅ Step 1 complete: ${Date.now() - parallelStart}ms`)
 
       // Check for errors
       if (simResult.error) throw simResult.error
@@ -87,7 +258,13 @@ export function FacilitatorSimulation() {
 
       // Query 4: Load phases (can run after we have the data)
       // This loads phases AND subscribes to real-time updates
+      console.log('   📍 Step 2: Loading phases...')
+      const phasesStart = Date.now()
       await loadPhases(runId)
+      console.log(`   ✅ Step 2 complete: ${Date.now() - phasesStart}ms`)
+
+      const totalDuration = Date.now() - loadStart
+      console.log(`✅ [FacilitatorSimulation] TOTAL LOAD TIME: ${totalDuration}ms`)
 
       setLoading(false)
     } catch (err: any) {
@@ -243,6 +420,19 @@ export function FacilitatorSimulation() {
 
             <PhaseControls runId={runId!} />
 
+            {/* Voting Management */}
+            {currentPhase && (
+              <div className="mt-6">
+                <VotingControls
+                  runId={runId!}
+                  phaseId={currentPhase.phase_id}
+                  phaseDurationMinutes={currentPhase.actual_duration_minutes || currentPhase.default_duration_minutes}
+                  allRoles={roles}
+                  allClans={clans}
+                />
+              </div>
+            )}
+
             {/* Current Phase Details */}
             {currentPhase && (
               <div className="mt-6 bg-white rounded-lg border-2 border-neutral-200 p-6">
@@ -388,6 +578,21 @@ export function FacilitatorSimulation() {
                 <button className="w-full px-4 py-2 bg-neutral-100 text-neutral-700 rounded-lg hover:bg-neutral-200 transition-colors text-left">
                   🗳️ View Voting Results
                 </button>
+
+                {/* Divider */}
+                <div className="border-t-2 border-neutral-200 my-4" />
+
+                {/* Re-Start Simulation */}
+                <button
+                  onClick={handleRestartSimulation}
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-warning bg-opacity-10 border-2 border-warning text-warning rounded-lg hover:bg-warning hover:text-white transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  🔄 Re-Start Simulation
+                </button>
+                <p className="text-xs text-neutral-500 mt-1 px-2">
+                  Reset to beginning (for testing)
+                </p>
               </div>
             </div>
           </div>

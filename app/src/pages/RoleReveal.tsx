@@ -12,36 +12,42 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getRoleForUser } from '../lib/data/participants'
-import type { Role } from '../types/database'
+import type { Role, SimRun, Clan } from '../types/database'
 
 export function RoleReveal() {
   const { runId } = useParams<{ runId: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
 
+  console.log('🎭 [RoleReveal] Component loaded', { runId, userId: user?.id })
+
   const [role, setRole] = useState<Role | null>(null)
+  const [clan, setClan] = useState<Clan | null>(null)
+  const [simulation, setSimulation] = useState<SimRun | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   // Stage 1: Ready modal
   const [showReadyModal, setShowReadyModal] = useState(true)
-  const [revealStarted, setRevealStarted] = useState(false)
 
-  // Stage 2: Reveal sequence
+  // Stage 2: Clan reveal (first)
+  const [showClanReveal, setShowClanReveal] = useState(false)
+  const [clanRevealed, setClanRevealed] = useState(false)
+
+  // Stage 3: Character reveal (after clan click)
+  const [showCharacterReveal, setShowCharacterReveal] = useState(false)
   const [showAvatar, setShowAvatar] = useState(false)
-  const [showName, setShowName] = useState(false)
-  const [showTitle, setShowTitle] = useState(false)
-  const [showClan, setShowClan] = useState(false)
+  const [showCharacterDetails, setShowCharacterDetails] = useState(false)
   const [revealComplete, setRevealComplete] = useState(false)
 
-  // Load role data
+  // Load role data and simulation info
   useEffect(() => {
     if (!user || !runId) {
       navigate('/login')
       return
     }
 
-    const loadRole = async () => {
+    const loadData = async () => {
       try {
         // Get role for this user in this simulation
         const roleData = await getRoleForUser(user.id, runId)
@@ -52,7 +58,34 @@ export function RoleReveal() {
           return
         }
 
+        console.log('🔍 [RoleReveal] Role data loaded:', roleData)
+
+        // Get simulation data (need started_at for localStorage key)
+        const { data: simData, error: simError } = await supabase
+          .from('sim_runs')
+          .select('*')
+          .eq('run_id', runId)
+          .single()
+
+        if (simError) throw simError
+
+        // Get clan data
+        const { data: clanData, error: clanError } = await supabase
+          .from('clans')
+          .select('*')
+          .eq('clan_id', roleData.clan_id)
+          .single()
+
+        if (clanError) {
+          console.error('Error loading clan:', clanError)
+          throw clanError
+        }
+
+        console.log('🔍 [RoleReveal] Clan data loaded:', clanData)
+
         setRole(roleData)
+        setClan(clanData)
+        setSimulation(simData)
         setLoading(false)
       } catch (err: any) {
         console.error('Error loading role:', err)
@@ -61,25 +94,39 @@ export function RoleReveal() {
       }
     }
 
-    loadRole()
+    loadData()
   }, [user, runId, navigate])
 
-  // Start reveal sequence
+  // Stage 1 -> Stage 2: Show clan reveal
   const handleStartReveal = () => {
     setShowReadyModal(false)
-    setRevealStarted(true)
+    setShowClanReveal(true)
 
-    // Sequence timing (in milliseconds)
-    setTimeout(() => setShowAvatar(true), 500) // Avatar fades in
-    setTimeout(() => setShowName(true), 2000) // Name appears
-    setTimeout(() => setShowTitle(true), 3500) // Title appears
-    setTimeout(() => setShowClan(true), 5000) // Clan appears
-    setTimeout(() => setRevealComplete(true), 6500) // Show continue button
+    // Clan appears from darkness
+    setTimeout(() => setClanRevealed(true), 500)
   }
 
-  // Navigate to role briefing
+  // Stage 2 -> Stage 3: User clicks after seeing clan, show character
+  const handleClanContinue = () => {
+    setShowClanReveal(false)
+    setShowCharacterReveal(true)
+
+    // Character reveal sequence
+    setTimeout(() => setShowAvatar(true), 500)           // Avatar fades in
+    setTimeout(() => setShowCharacterDetails(true), 2000) // Name + title + age all together
+    setTimeout(() => setRevealComplete(true), 3500)      // Show continue button
+  }
+
+  // Navigate to participant dashboard
   const handleContinue = () => {
-    navigate(`/role-briefing/${runId}`)
+    // Mark role reveal as seen in localStorage
+    if (user && runId && simulation?.started_at) {
+      const key = `hasSeenRoleReveal_${user.id}_${runId}_${simulation.started_at}`
+      localStorage.setItem(key, 'true')
+      console.log('✅ Role reveal marked as seen:', key)
+    }
+
+    navigate(`/participant/${runId}`)
   }
 
   if (loading) {
@@ -106,8 +153,6 @@ export function RoleReveal() {
     )
   }
 
-  const clanData = (role as any).clans
-
   return (
     <div className="min-h-screen bg-neutral-900 relative overflow-hidden">
       {/* Stage 1: Ready Modal */}
@@ -126,26 +171,18 @@ export function RoleReveal() {
               transition={{ delay: 0.2 }}
               className="bg-white rounded-lg p-12 max-w-2xl mx-4 text-center"
             >
-              {/* Icon */}
+              {/* App Logo */}
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ delay: 0.4, type: 'spring', stiffness: 200 }}
-                className="w-32 h-32 mx-auto mb-6 bg-primary bg-opacity-10 rounded-full flex items-center justify-center"
+                className="w-32 h-32 mx-auto mb-6 rounded-full overflow-hidden shadow-2xl border-4 border-primary"
               >
-                <svg
-                  className="w-16 h-16 text-primary"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                  />
-                </svg>
+                <img
+                  src="/olive.jpg"
+                  alt="The New King SIM"
+                  className="w-full h-full object-cover"
+                />
               </motion.div>
 
               {/* Message */}
@@ -158,22 +195,14 @@ export function RoleReveal() {
                 Are you ready to discover your role?
               </motion.h1>
 
-              <motion.p
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.8 }}
-                className="text-neutral-600 text-lg mb-8"
-              >
-                Your character awaits in the ancient city of Kourion...
-              </motion.p>
 
               {/* Button */}
               <motion.button
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 1 }}
+                transition={{ delay: 0.8 }}
                 onClick={handleStartReveal}
-                className="px-8 py-4 bg-primary text-white rounded-lg text-lg font-medium hover:bg-opacity-90 transition-all transform hover:scale-105"
+                className="px-8 py-4 bg-primary text-white rounded-lg text-lg font-medium hover:bg-opacity-90 transition-all transform hover:scale-105 shadow-xl"
               >
                 Yes, reveal my role!
               </motion.button>
@@ -182,8 +211,80 @@ export function RoleReveal() {
         )}
       </AnimatePresence>
 
-      {/* Stage 2: Reveal Sequence (from darkness) */}
-      {revealStarted && (
+      {/* Stage 2: Clan Reveal (from darkness) */}
+      <AnimatePresence>
+        {showClanReveal && clan && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black flex items-center justify-center z-50"
+          >
+            <div className="text-center max-w-2xl mx-4">
+              <AnimatePresence>
+                {clanRevealed && (
+                  <>
+                    {/* Clan Emblem - Large and centered in circle */}
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 2, type: 'spring' }}
+                      className="mb-8"
+                    >
+                      {clan.emblem_url && (
+                        <div className="w-48 h-48 mx-auto rounded-full overflow-hidden bg-white shadow-2xl border-4 flex items-center justify-center p-4"
+                          style={{
+                            borderColor: clan.color_hex || '#8B7355',
+                            boxShadow: `0 0 60px ${clan.color_hex || '#8B7355'}80, 0 20px 40px rgba(0,0,0,0.3)`
+                          }}
+                        >
+                          <img
+                            src={clan.emblem_url}
+                            alt={clan.name}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                      )}
+                    </motion.div>
+
+                    {/* Clan Name - Large and dramatic */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 30 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 1.5, delay: 1 }}
+                      className="text-6xl font-heading font-bold mb-8"
+                      style={{
+                        color: clan.color_hex || '#8B7355',
+                        textShadow: `0 0 60px ${clan.color_hex || '#8B7355'}80`
+                      }}
+                    >
+                      {clan.name}
+                    </motion.div>
+
+                    {/* Click to continue */}
+                    <motion.button
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 1, delay: 2 }}
+                      onClick={handleClanContinue}
+                      className="px-8 py-4 rounded-lg text-lg font-medium hover:opacity-90 transition-all transform hover:scale-105 shadow-2xl"
+                      style={{
+                        backgroundColor: clan.color_hex || '#8B7355',
+                        color: 'white'
+                      }}
+                    >
+                      Discover Your Role →
+                    </motion.button>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Stage 3: Character Reveal */}
+      {showCharacterReveal && (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center max-w-2xl mx-4">
             {/* Avatar - Fades in first */}
@@ -212,32 +313,27 @@ export function RoleReveal() {
               )}
             </AnimatePresence>
 
-            {/* Name - Appears second */}
+            {/* Name + Title + Age - All appear together */}
             <AnimatePresence>
-              {showName && (
-                <motion.h1
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 1 }}
-                  className="font-heading text-6xl text-white mb-4"
-                >
-                  {role.name}
-                </motion.h1>
-              )}
-            </AnimatePresence>
-
-            {/* Title/Position - Appears third */}
-            <AnimatePresence>
-              {showTitle && role.position && (
+              {showCharacterDetails && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 1 }}
-                  className="mb-4"
                 >
-                  <p className="text-2xl text-neutral-300 font-medium">
-                    {role.position}
-                  </p>
+                  {/* Name */}
+                  <h1 className="font-heading text-6xl text-white mb-4">
+                    {role.name}
+                  </h1>
+
+                  {/* Title/Position */}
+                  {role.position && (
+                    <p className="text-2xl text-neutral-300 font-medium">
+                      {role.position}
+                    </p>
+                  )}
+
+                  {/* Age */}
                   {role.age && (
                     <p className="text-lg text-neutral-400 mt-2">
                       Age: {role.age}
@@ -247,48 +343,7 @@ export function RoleReveal() {
               )}
             </AnimatePresence>
 
-            {/* Clan - Appears last */}
-            <AnimatePresence>
-              {showClan && clanData && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 1 }}
-                  className="mt-8 inline-block"
-                >
-                  <div
-                    className="px-8 py-4 rounded-lg border-2 shadow-xl"
-                    style={{
-                      borderColor: clanData.color_hex || '#8B7355',
-                      backgroundColor: `${clanData.color_hex || '#8B7355'}20`
-                    }}
-                  >
-                    <div className="flex items-center gap-4">
-                      {clanData.emblem_url && (
-                        <img
-                          src={clanData.emblem_url}
-                          alt={clanData.name}
-                          className="w-12 h-12 object-contain"
-                        />
-                      )}
-                      <div className="text-left">
-                        <div className="text-sm text-neutral-400 uppercase tracking-wide">
-                          Your Clan
-                        </div>
-                        <div
-                          className="text-3xl font-heading font-bold"
-                          style={{ color: clanData.color_hex || '#8B7355' }}
-                        >
-                          {clanData.name}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Continue Button - Appears when reveal complete */}
+            {/* Continue Button */}
             <AnimatePresence>
               {revealComplete && (
                 <motion.div
@@ -299,9 +354,9 @@ export function RoleReveal() {
                 >
                   <button
                     onClick={handleContinue}
-                    className="px-8 py-4 bg-primary text-white rounded-lg text-lg font-medium hover:bg-opacity-90 transition-all transform hover:scale-105"
+                    className="px-8 py-4 bg-primary text-white rounded-lg text-lg font-medium hover:bg-opacity-90 transition-all transform hover:scale-105 shadow-xl"
                   >
-                    View Your Briefing →
+                    Enter the SIM!
                   </button>
                 </motion.div>
               )}

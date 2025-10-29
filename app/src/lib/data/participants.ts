@@ -164,12 +164,13 @@ export async function updateUserStatus(
 }
 
 /**
- * Get role assigned to a specific user
+ * Get role assigned to a specific user (OPTIMIZED - no JOIN)
+ * Note: Clan details should be fetched separately if needed
  */
 export async function getRoleForUser(userId: string, runId: string): Promise<Role | null> {
-  const { data, error } = await supabase
+  const { data, error} = await supabase
     .from('roles')
-    .select('*, clans(name, about, key_priorities, color_hex, emblem_url)')
+    .select('*')
     .eq('run_id', runId)
     .eq('assigned_user_id', userId)
     .maybeSingle()

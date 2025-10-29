@@ -111,6 +111,9 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
     set({ loading: true, error: null, runId })
 
     try {
+      console.log('      [phaseStore] Loading phases...')
+      const phasesQueryStart = Date.now()
+
       const { data: phases, error } = await supabase
         .from('phases')
         .select('*')
@@ -118,13 +121,19 @@ export const usePhaseStore = create<PhaseStore>((set, get) => ({
         .order('sequence_number', { ascending: true })
 
       if (error) throw error
+      console.log(`      [phaseStore] Phases query: ${Date.now() - phasesQueryStart}ms`)
 
       // Get current phase from sim_runs.current_phase_id (single source of truth)
+      console.log('      [phaseStore] Fetching current_phase_id...')
+      const currentPhaseQueryStart = Date.now()
+
       const { data: simRun } = await supabase
         .from('sim_runs')
         .select('current_phase_id')
         .eq('run_id', runId)
         .single()
+
+      console.log(`      [phaseStore] Current phase query: ${Date.now() - currentPhaseQueryStart}ms`)
 
       const currentPhase = simRun?.current_phase_id
         ? phases?.find((p) => p.phase_id === simRun.current_phase_id) || null

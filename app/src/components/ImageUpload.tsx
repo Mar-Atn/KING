@@ -1,10 +1,11 @@
 /**
  * ImageUpload Component
  * Displays current image and allows uploading a new one
- * For simplicity, currently accepts file input and displays preview
+ * NOW USES SUPABASE STORAGE (no more base64!)
  */
 
 import { useState, useRef } from 'react'
+import { supabase } from '../lib/supabase'
 
 interface ImageUploadProps {
   currentUrl?: string
@@ -32,12 +33,13 @@ export function ImageUpload({
   label = 'Change Image'
 }: ImageUploadProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const sizeClass = sizeClasses[size]
   const shapeClass = circular ? 'rounded-full' : 'rounded-lg'
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -53,17 +55,58 @@ export function ImageUpload({
       return
     }
 
-    // Create preview URL
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const result = e.target?.result as string
-      setPreviewUrl(result)
+    setIsUploading(true)
 
-      // For now, we'll use the data URL directly
-      // In production, you might want to upload to Supabase Storage
-      onUpload(result)
+    try {
+      // Create preview URL for immediate feedback
+      const objectUrl = URL.createObjectURL(file)
+      setPreviewUrl(objectUrl)
+
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+      const filePath = `avatars/${fileName}`
+
+      console.log('📤 Uploading to Supabase Storage:', filePath)
+
+      // Upload to Supabase Storage (avatars bucket)
+      const { data, error } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (error) {
+        console.error('❌ Upload error:', error)
+        throw error
+      }
+
+      console.log('✅ Upload successful:', data)
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      console.log('🔗 Public URL:', publicUrl)
+
+      // Call parent's onUpload with the public URL (NOT base64!)
+      onUpload(publicUrl)
+
+      // Clean up object URL
+      URL.revokeObjectURL(objectUrl)
+
+    } catch (error: any) {
+      console.error('Failed to upload image:', error)
+      alert(`Upload failed: ${error.message || 'Unknown error'}`)
+      setPreviewUrl(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    } finally {
+      setIsUploading(false)
     }
-    reader.readAsDataURL(file)
   }
 
   const displayUrl = previewUrl || currentUrl
@@ -71,13 +114,20 @@ export function ImageUpload({
   return (
     <div className="flex items-center gap-4">
       {/* Image Preview */}
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 relative">
         {displayUrl ? (
-          <img
-            src={displayUrl}
-            alt={altText}
-            className={`${sizeClass} ${shapeClass} object-cover border-2 border-neutral-300`}
-          />
+          <>
+            <img
+              src={displayUrl}
+              alt={altText}
+              className={`${sizeClass} ${shapeClass} object-cover border-2 border-neutral-300`}
+            />
+            {isUploading && (
+              <div className={`absolute inset-0 ${shapeClass} bg-black bg-opacity-50 flex items-center justify-center`}>
+                <div className="text-white text-xs font-medium">Uploading...</div>
+              </div>
+            )}
+          </>
         ) : (
           <div
             className={`${sizeClass} ${shapeClass} bg-neutral-200 flex items-center justify-center text-neutral-600 font-bold border-2 border-neutral-300`}
@@ -95,15 +145,17 @@ export function ImageUpload({
           accept="image/*"
           onChange={handleFileSelect}
           className="hidden"
+          disabled={isUploading}
         />
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-sm font-medium rounded-lg transition-colors border border-neutral-300"
+          disabled={isUploading}
+          className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-sm font-medium rounded-lg transition-colors border border-neutral-300 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {label}
+          {isUploading ? 'Uploading...' : label}
         </button>
-        {displayUrl && (
+        {displayUrl && !isUploading && (
           <button
             type="button"
             onClick={() => {

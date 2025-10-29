@@ -48,49 +48,47 @@ export function Dashboard() {
     if (!user?.id) return
 
     try {
-      // Get simulations
-      const { data: sims, error: simError } = await supabase
-        .from('sim_runs')
-        .select('*')
-        .eq('facilitator_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(10)
+      // Step 1: Get simulations and ALL phases in PARALLEL (2 queries instead of 7+!)
+      const [simsResult, phasesResult] = await Promise.all([
+        supabase
+          .from('sim_runs')
+          .select('run_id, run_name, version, status, created_at, started_at, completed_at, facilitator_id, current_phase_id, total_participants, human_participants, ai_participants')
+          .eq('facilitator_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(10),
 
-      if (simError) throw simError
+        // Get ALL phases for ALL simulations at once
+        supabase
+          .from('phases')
+          .select('*')
+      ])
 
-      console.log('📊 Loaded simulations:', sims?.length || 0)
+      if (simsResult.error) throw simsResult.error
+      if (phasesResult.error) throw phasesResult.error
 
-      // For each simulation, get current phase from sim_runs.current_phase_id
-      const simsWithPhases = await Promise.all(
-        (sims || []).map(async (sim) => {
-          let currentPhase = null
+      const sims = simsResult.data || []
+      const allPhases = phasesResult.data || []
 
-          // Use current_phase_id from sim_runs table (single source of truth)
-          if (sim.current_phase_id) {
-            const { data: phase } = await supabase
-              .from('phases')
-              .select('*')
-              .eq('phase_id', sim.current_phase_id)
-              .maybeSingle()
+      console.log('📊 Loaded simulations:', sims.length)
 
-            currentPhase = phase
-          }
+      // Step 2: Match phases to simulations in memory (no extra queries!)
+      const simsWithPhases = sims.map(sim => {
+        // Find current phase by current_phase_id (single source of truth)
+        const currentPhase = sim.current_phase_id
+          ? allPhases.find(p => p.phase_id === sim.current_phase_id) || null
+          : null
 
-          // Get total phase count (cached query, should be fast)
-          const { count } = await supabase
-            .from('phases')
-            .select('*', { count: 'exact', head: true })
-            .eq('run_id', sim.run_id)
+        // Count total phases for this simulation
+        const totalPhases = allPhases.filter(p => p.run_id === sim.run_id).length
 
-          console.log(`📍 ${sim.run_name}: ${count || 0} phases, current: ${currentPhase?.name || 'none'} (from current_phase_id: ${sim.current_phase_id || 'null'})`)
+        console.log(`📍 ${sim.run_name}: ${totalPhases} phases, current: ${currentPhase?.name || 'none'} (from current_phase_id: ${sim.current_phase_id || 'null'})`)
 
-          return {
-            ...sim,
-            current_phase: currentPhase,
-            total_phases: count || 0,
-          }
-        })
-      )
+        return {
+          ...sim,
+          current_phase: currentPhase,
+          total_phases: totalPhases,
+        }
+      })
 
       setSimulations(simsWithPhases)
     } catch (error) {

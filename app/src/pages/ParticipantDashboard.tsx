@@ -15,6 +15,9 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getRoleForUser } from '../lib/data/participants'
 import { PhaseChangeModal } from '../components/PhaseChangeModal'
+import { Ballot } from '../components/voting/Ballot'
+import { ResultsDisplay } from '../components/voting/ResultsDisplay'
+import { useVoting } from '../hooks/useVoting'
 import type { Role, Clan, Phase, SimRun } from '../types/database'
 
 type Tab = 'role' | 'clan' | 'process' | 'materials'
@@ -40,17 +43,59 @@ export function ParticipantDashboard() {
   const [previousPhaseName, setPreviousPhaseName] = useState<string | undefined>()
   const previousPhaseIdRef = useRef<string | null>(null)
 
-  // Load all data
+  // Helper to check if role reveal has been seen (uses localStorage with simulation timestamp)
+  const getHasSeenRoleReveal = (startedAt: string | null): boolean => {
+    if (!user || !runId || !startedAt) {
+      console.log('❌ getHasSeenRoleReveal: Missing required data', { user: !!user, runId: !!runId, startedAt: !!startedAt })
+      return false
+    }
+    const key = `hasSeenRoleReveal_${user.id}_${runId}_${startedAt}`
+    const value = localStorage.getItem(key)
+    console.log('🔍 getHasSeenRoleReveal:', { key, value, result: value === 'true' })
+    return value === 'true'
+  }
+
+  const setHasSeenRoleReveal = (startedAt: string | null) => {
+    if (!user || !runId || !startedAt) return
+    const key = `hasSeenRoleReveal_${user.id}_${runId}_${startedAt}`
+    localStorage.setItem(key, 'true')
+    console.log('✅ setHasSeenRoleReveal:', key)
+  }
+
+  // Voting state
+  const [showBallot, setShowBallot] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const [selectedResultSession, setSelectedResultSession] = useState<any>(null)
+  const { sessions, fetchSessions, fetchResults } = useVoting({
+    runId: runId || undefined,
+    phaseId: simulation?.current_phase_id || undefined,
+    roleId: role?.role_id
+  })
+
+  // Load all data (run only once on mount)
   useEffect(() => {
+    console.log('🔄 [useEffect] Triggered', { userId: user?.id, runId })
+
     if (!user || !runId) {
       navigate('/login')
       return
     }
 
+    // Prevent multiple loads
+    let mounted = true
+
     const loadData = async () => {
+      if (!mounted) return
+
       try {
-        // Get role
+        console.log('⏱️  [ParticipantDashboard] Starting data load...')
+        const loadStart = Date.now()
+
+        // Step 1: Get user's role first (needed for clan_id)
+        console.log('   📍 Step 1: Fetching role...')
+        const roleStart = Date.now()
         const roleData = await getRoleForUser(user.id, runId)
+        console.log(`   ✅ Step 1 complete: ${Date.now() - roleStart}ms`)
 
         if (!roleData) {
           navigate(`/waiting-room/${runId}`)
@@ -59,58 +104,103 @@ export function ParticipantDashboard() {
 
         setRole(roleData)
 
-        // Get simulation info
-        const { data: simData, error: simError } = await supabase
+        // Step 2: Run ALL remaining queries in PARALLEL (5-10x faster!)
+        console.log('   📍 Step 2: Fetching parallel queries...')
+        const parallelStart = Date.now()
+
+        // Time each query individually
+        const simStart = Date.now()
+        const simPromise = supabase
           .from('sim_runs')
-          .select('*')
+          .select('run_id, run_name, version, status, created_at, started_at, completed_at, facilitator_id, current_phase_id, total_participants, human_participants, ai_participants, notes')
           .eq('run_id', runId)
           .single()
+          .then(r => { console.log(`      sim_runs: ${Date.now() - simStart}ms`); return r })
 
-        if (simError) throw simError
-        setSimulation(simData)
-
-        // Get all clan members (including this role)
-        const { data: membersData, error: membersError } = await supabase
-          .from('roles')
-          .select('*, users!roles_assigned_user_id_fkey(display_name)')
-          .eq('clan_id', roleData.clan_id)
-          .order('name', { ascending: true })
-
-        if (membersError) throw membersError
-        setClanMembers(membersData || [])
-
-        // Get all clans for this simulation
-        const { data: clansData, error: clansError } = await supabase
+        const clansStart = Date.now()
+        const clansPromise = supabase
           .from('clans')
           .select('*')
           .eq('run_id', runId)
           .order('sequence_number', { ascending: true })
+          .then(r => { console.log(`      clans: ${Date.now() - clansStart}ms`); return r })
 
-        if (clansError) throw clansError
-        setAllClans(clansData || [])
-
-        // Get all roles for this simulation (to count clan members)
-        const { data: allRolesData, error: allRolesError } = await supabase
+        const rolesStart = Date.now()
+        const rolesPromise = supabase
           .from('roles')
-          .select('*')
+          .select('role_id, run_id, clan_id, participant_type, assigned_user_id, name, age, position, avatar_url, status, created_at')
           .eq('run_id', runId)
+          .then(r => { console.log(`      roles: ${Date.now() - rolesStart}ms`); return r })
 
-        if (allRolesError) throw allRolesError
-        setAllRoles(allRolesData || [])
-
-        // Get all phases for this simulation
-        const { data: phasesData, error: phasesError } = await supabase
+        const phasesStart = Date.now()
+        const phasesPromise = supabase
           .from('phases')
           .select('*')
           .eq('run_id', runId)
           .order('sequence_number', { ascending: true })
+          .then(r => { console.log(`      phases: ${Date.now() - phasesStart}ms`); return r })
 
-        if (phasesError) throw phasesError
-        setPhases(phasesData || [])
+        const [simResult, clansResult, allRolesResult, phasesResult] = await Promise.all([
+          simPromise,
+          clansPromise,
+          rolesPromise,
+          phasesPromise
+        ])
+
+        console.log(`   ✅ Step 2 complete: ${Date.now() - parallelStart}ms`)
+
+        // Check for errors in parallel queries
+        if (simResult.error) throw simResult.error
+        if (clansResult.error) throw clansResult.error
+        if (allRolesResult.error) throw allRolesResult.error
+        if (phasesResult.error) throw phasesResult.error
+
+        console.log('   📍 Step 3: Processing data...')
+        // Set all state
+        setSimulation(simResult.data)
+        setAllClans(clansResult.data || [])
+        setAllRoles(allRolesResult.data || [])
+        setPhases(phasesResult.data || [])
+
+        // Filter clan members from allRoles (no extra query needed)
+        const clanMembersFiltered = (allRolesResult.data || [])
+          .filter(r => r.clan_id === roleData.clan_id)
+          .sort((a, b) => a.name.localeCompare(b.name))
+        setClanMembers(clanMembersFiltered)
 
         // Initialize the phase ref with current phase (for detecting changes later)
-        if (simData?.current_phase_id) {
-          previousPhaseIdRef.current = simData.current_phase_id
+        if (simResult.data?.current_phase_id) {
+          previousPhaseIdRef.current = simResult.data.current_phase_id
+        }
+
+        const totalDuration = Date.now() - loadStart
+        console.log(`✅ [ParticipantDashboard] TOTAL LOAD TIME: ${totalDuration}ms`)
+        console.log(`   - Role query: ${Date.now() - roleStart}ms`)
+        console.log(`   - Parallel queries: ${Date.now() - parallelStart}ms`)
+
+        // Check if we need to redirect to role reveal (Phase 1 just started)
+        const currentPhaseId = simResult.data?.current_phase_id
+        if (currentPhaseId && simResult.data?.started_at) {
+          const hasSeenReveal = getHasSeenRoleReveal(simResult.data.started_at)
+
+          // Find the current phase
+          const currentPhaseData = phasesResult.data?.find(p => p.phase_id === currentPhaseId)
+
+          console.log('🔍 [Role Reveal Check on Load]', {
+            currentPhaseId,
+            currentPhaseName: currentPhaseData?.name,
+            sequenceNumber: currentPhaseData?.sequence_number,
+            startedAt: simResult.data?.started_at,
+            hasSeenReveal,
+            willRedirect: currentPhaseData?.sequence_number === 0 && !hasSeenReveal
+          })
+
+          // If this is Phase 0 (Role Distribution) and user hasn't seen the reveal yet, redirect
+          if (currentPhaseData && currentPhaseData.sequence_number === 0 && !hasSeenReveal) {
+            console.log('🎭 Phase 0 (Role Distribution) detected on load! Redirecting to role reveal...')
+            navigate(`/role-reveal/${runId}`)
+            return // Don't set loading to false, we're redirecting
+          }
         }
 
         setLoading(false)
@@ -154,14 +244,50 @@ export function ParticipantDashboard() {
               .single()
               .then(({ data: phaseData }) => {
                 if (phaseData) {
-                  // Find previous phase name
-                  const prevPhase = phases.find(p => p.phase_id === oldPhaseId)
+                  // Check if this is the first phase (Phase 1) and user hasn't seen role reveal
+                  const hasSeenReveal = getHasSeenRoleReveal(newSimData.started_at)
 
-                  setNewPhaseForModal(phaseData)
-                  setPreviousPhaseName(prevPhase?.name)
-                  setShowPhaseModal(true)
+                  console.log('🔍 [Role Reveal Check in Subscription]', {
+                    newPhaseName: phaseData.name,
+                    sequenceNumber: phaseData.sequence_number,
+                    startedAt: newSimData.started_at,
+                    hasSeenReveal,
+                    willRedirect: phaseData.sequence_number === 0 && !hasSeenReveal
+                  })
+
+                  if (phaseData.sequence_number === 0 && !hasSeenReveal) {
+                    console.log('🎭 Phase 0 (Role Distribution) started! Redirecting to role reveal...')
+                    setHasSeenRoleReveal(newSimData.started_at)
+                    navigate(`/role-reveal/${runId}`)
+                  } else {
+                    // For all other phases, show the phase change modal
+                    const prevPhase = phases.find(p => p.phase_id === oldPhaseId)
+                    setNewPhaseForModal(phaseData)
+                    setPreviousPhaseName(prevPhase?.name)
+                    setShowPhaseModal(true)
+                  }
                 }
               })
+          }
+
+          // Special case: If this is the FIRST phase ever (no old phase), redirect to role reveal
+          if (newPhaseId && oldPhaseId === null) {
+            const hasSeenReveal = getHasSeenRoleReveal(newSimData.started_at)
+
+            if (!hasSeenReveal) {
+              supabase
+                .from('phases')
+                .select('*')
+                .eq('phase_id', newPhaseId)
+                .single()
+                .then(({ data: phaseData }) => {
+                  if (phaseData && phaseData.sequence_number === 0) {
+                    console.log('🎭 Phase 0 detected in subscription (first phase ever)! Redirecting to role reveal...')
+                    setHasSeenRoleReveal(newSimData.started_at)
+                    navigate(`/role-reveal/${runId}`)
+                  }
+                })
+            }
           }
 
           // Update the ref to track current phase
@@ -199,10 +325,12 @@ export function ParticipantDashboard() {
 
     // Cleanup subscriptions on unmount
     return () => {
+      mounted = false
       simRunsSubscription.unsubscribe()
       phasesSubscription.unsubscribe()
     }
-  }, [user, runId, navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, runId]) // Removed 'navigate' to prevent re-render loop
 
   if (loading) {
     return (
@@ -228,7 +356,8 @@ export function ParticipantDashboard() {
     )
   }
 
-  const clanData = (role as any).clans
+  // Find clan data from allClans array (since we no longer JOIN in the query)
+  const clanData = allClans.find(c => c.clan_id === role.clan_id)
 
   // Get current phase if any
   const currentPhase = simulation?.current_phase_id
@@ -242,6 +371,101 @@ export function ParticipantDashboard() {
     currentPhase_found: !!currentPhase,
     currentPhase_name: currentPhase?.name
   })
+
+  // Find open vote for this participant
+  const openVote = sessions.find(s => {
+    if (s.status !== 'open') return false
+
+    // Check if participant is eligible to vote
+    if (s.scope === 'all') return true
+
+    if (s.scope === 'clan_only' && role) {
+      return s.scope_clan_id === role.clan_id
+    }
+
+    return false
+  })
+
+  // Find announced results for this participant
+  const announcedSessions = sessions.filter(s => {
+    if (s.status !== 'announced') return false
+
+    // Check if participant was eligible to see these results
+    if (s.scope === 'all') return true
+
+    if (s.scope === 'clan_only' && role) {
+      return s.scope_clan_id === role.clan_id
+    }
+
+    return false
+  })
+
+  // Check if simulation hasn't started yet
+  const simulationNotStarted = simulation?.status === 'setup' && !currentPhase
+
+  // If simulation hasn't started, show waiting room
+  if (simulationNotStarted) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="max-w-2xl w-full">
+          {/* Waiting Room Card */}
+          <div className="bg-white rounded-xl shadow-2xl border-4 border-primary p-8 text-center">
+            {/* Icon */}
+            <div className="w-20 h-20 bg-primary bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-10 h-10 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+
+            {/* Title */}
+            <h1 className="font-heading text-3xl text-primary mb-4">
+              Waiting Room
+            </h1>
+
+            {/* Simulation Name */}
+            <div className="bg-neutral-50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-neutral-600 mb-1">Simulation:</p>
+              <p className="font-semibold text-xl text-neutral-900">{simulation?.run_name}</p>
+            </div>
+
+            {/* Message */}
+            <div className="space-y-4 mb-8">
+              <p className="text-lg text-neutral-700">
+                You have been registered for this simulation.
+              </p>
+              <p className="text-neutral-600">
+                The facilitator will start the simulation soon. Once the simulation begins,
+                you will receive your role and all the information you need to participate.
+              </p>
+              <p className="text-sm text-neutral-500 italic">
+                Please wait for the facilitator to begin Phase 1...
+              </p>
+            </div>
+
+            {/* Status Indicator */}
+            <div className="flex items-center justify-center gap-3 text-neutral-500">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: '200ms' }}></div>
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: '400ms' }}></div>
+              </div>
+              <span className="text-sm font-medium">Waiting to start</span>
+            </div>
+
+            {/* Logout Link */}
+            <div className="mt-8 pt-6 border-t border-neutral-200">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="text-neutral-600 hover:text-primary text-sm underline"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -345,6 +569,93 @@ export function ParticipantDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Vote Notification Banner */}
+      {openVote && role && (
+        <div className="bg-amber-50 border-b-2 border-amber-300">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2 h-2 bg-amber-600 rounded-full animate-pulse" />
+                  <h3 className="font-semibold text-amber-900">
+                    🗳️ Vote Now: {openVote.proposal_title}
+                  </h3>
+                </div>
+                {openVote.proposal_description && (
+                  <p className="text-sm text-amber-700">
+                    {openVote.proposal_description}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setShowBallot(true)}
+                className="px-6 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-semibold shadow-md"
+              >
+                Cast Vote
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Announced Results Banner */}
+      {announcedSessions.length > 0 && (
+        <div className="bg-white border-b-2 border-neutral-200">
+          <div className="container mx-auto px-4 py-4">
+            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full" />
+                    <h3 className="font-semibold text-blue-900">
+                      📊 Vote Results Announced ({announcedSessions.length})
+                    </h3>
+                  </div>
+                  <p className="text-sm text-blue-700">
+                    View the results from completed votes
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    // Show first announced session's results
+                    const session = announcedSessions[0]
+                    const results = await fetchResults(session.session_id)
+                    if (results) {
+                      setSelectedResultSession({ ...session, results })
+                      setShowResults(true)
+                    }
+                  }}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-md"
+                >
+                  View Results
+                </button>
+              </div>
+              {announcedSessions.length > 1 && (
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <p className="text-xs text-blue-600">
+                    {announcedSessions.slice(1).map((s, i) => (
+                      <button
+                        key={s.session_id}
+                        onClick={async () => {
+                          const results = await fetchResults(s.session_id)
+                          if (results) {
+                            setSelectedResultSession({ ...s, results })
+                            setShowResults(true)
+                          }
+                        }}
+                        className="mr-3 underline hover:text-blue-800"
+                      >
+                        {s.proposal_title}
+                      </button>
+                    ))}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="bg-white border-b border-neutral-200">
@@ -854,6 +1165,35 @@ export function ParticipantDashboard() {
         newPhase={newPhaseForModal}
         previousPhaseName={previousPhaseName}
       />
+
+      {/* Ballot Modal */}
+      {showBallot && openVote && role && (
+        <Ballot
+          session={openVote}
+          myRoleId={role.role_id}
+          myClanId={role.clan_id}
+          allRoles={allRoles}
+          onVoteSubmitted={() => {
+            // Refresh vote sessions to update status
+            fetchSessions()
+            setShowBallot(false)
+          }}
+          onClose={() => setShowBallot(false)}
+        />
+      )}
+
+      {/* Results Display Modal */}
+      {showResults && selectedResultSession && (
+        <ResultsDisplay
+          session={selectedResultSession}
+          result={selectedResultSession.results}
+          allRoles={allRoles}
+          onClose={() => {
+            setShowResults(false)
+            setSelectedResultSession(null)
+          }}
+        />
+      )}
     </div>
   )
 }
