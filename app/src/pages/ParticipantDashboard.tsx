@@ -24,7 +24,7 @@ type Tab = 'role' | 'clan' | 'process' | 'materials'
 
 export function ParticipantDashboard() {
   const { runId } = useParams<{ runId: string }>()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState<Tab>('role')
@@ -74,9 +74,15 @@ export function ParticipantDashboard() {
 
   // Load all data (run only once on mount)
   useEffect(() => {
-    console.log('🔄 [useEffect] Triggered', { userId: user?.id, runId })
+    console.log('🔄 [ParticipantDashboard useEffect] Triggered', {
+      hasUser: !!user,
+      userId: user?.id,
+      runId
+    })
 
+    // Check if user exists (authLoading is already handled in render)
     if (!user || !runId) {
+      console.log('❌ [ParticipantDashboard] Redirecting to login - missing user or runId')
       navigate('/login')
       return
     }
@@ -330,7 +336,17 @@ export function ParticipantDashboard() {
       phasesSubscription.unsubscribe()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, runId]) // Removed 'navigate' to prevent re-render loop
+  }, [user?.id, runId]) // Effect runs when user or runId changes
+
+  // Show loading screen while auth is loading (prevents premature redirects)
+  if (authLoading) {
+    console.log('⏳ [ParticipantDashboard render] Auth is loading, showing spinner...')
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-neutral-600">Loading authentication...</div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

@@ -126,7 +126,12 @@ export function RoleReveal() {
       console.log('✅ Role reveal marked as seen:', key)
     }
 
-    navigate(`/participant/${runId}`)
+    console.log('🚀 [RoleReveal] Navigating to participant dashboard', {
+      user: !!user,
+      userId: user?.id,
+      runId
+    })
+    navigate(`/participant-dashboard/${runId}`)
   }
 
   if (loading) {

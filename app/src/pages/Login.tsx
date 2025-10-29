@@ -42,7 +42,14 @@ export function Login() {
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="font-heading text-4xl text-primary mb-2">The New King SIM</h1>
+          <div className="w-24 h-24 mx-auto mb-4 rounded-full overflow-hidden shadow-lg border-4 border-primary">
+            <img
+              src="/olive.jpg"
+              alt="The New King SIM"
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <h1 className="font-heading text-3xl text-primary mb-2">The New King SIM</h1>
           <p className="text-neutral-600">Sign in to your account</p>
         </div>
 
@@ -114,11 +121,6 @@ export function Login() {
               </Link>
             </p>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-6 text-center text-sm text-neutral-500">
-          <p>Ancient Cyprus Political Simulation</p>
         </div>
       </div>
     </div>
