@@ -757,8 +757,15 @@ export function ParticipantDashboard() {
       if (!error && data) {
         setClanVotes(data)
 
+        // Check if voting was restarted (no votes exist)
+        if (data.length === 0) {
+          const revealKey = `clan_allegiance_reveal_${runId}`
+          localStorage.removeItem(revealKey)
+          setShowClanAllegianceReveal(false)
+          console.log('🔄 Voting restarted - cleared reveal state')
+        }
         // Auto-show reveal if votes are revealed and user hasn't seen it yet
-        if (data.length > 0 && data[0].revealed) {
+        else if (data[0].revealed) {
           const revealKey = `clan_allegiance_reveal_${runId}`
           const hasSeenReveal = localStorage.getItem(revealKey)
 

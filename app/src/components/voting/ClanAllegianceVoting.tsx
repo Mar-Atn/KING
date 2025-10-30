@@ -81,6 +81,12 @@ export function ClanAllegianceVoting({ runId, userRoleId, userClan, votingStarte
       setExistingVote(data)
       setOathVote(data.oath_of_allegiance)
       setActionVote(data.initiate_actions)
+    } else {
+      // Vote doesn't exist or was deleted - reset state
+      setExistingVote(null)
+      setOathVote(null)
+      setActionVote(null)
+      console.log('🔄 Vote cleared - showing form again')
     }
   }
 
