@@ -17,9 +17,14 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
   const [loading, setLoading] = useState(true)
   const [revealing, setRevealing] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [stopping, setStopping] = useState(false)
   const [votes, setVotes] = useState<ClanVote[]>([])
   const [revealed, setRevealed] = useState(false)
   const [votingStarted, setVotingStarted] = useState(false)
+  const [votingActive, setVotingActive] = useState(false)
+  const [votingStopped, setVotingStopped] = useState(false)
+  const [timeRemaining, setTimeRemaining] = useState(300) // 5 minutes default
+  const [manualVotes, setManualVotes] = useState<Record<string, { oath: boolean | null, action: boolean | null }>>({}) // clanId => {oath, action}
 
   useEffect(() => {
     loadVotingState()
@@ -79,6 +84,23 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     setLoading(false)
   }
 
+  // Timer countdown
+  useEffect(() => {
+    if (!votingActive) return
+
+    const interval = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          handleStop()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [votingActive])
+
   const handleStartVoting = async () => {
     setStarting(true)
 
@@ -98,7 +120,30 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     }
 
     setVotingStarted(true)
+    setVotingActive(true)
+    setTimeRemaining(300) // 5 minutes
     alert('✅ Clan allegiance voting has started! All clans can now vote.')
+  }
+
+  const handleExtend = () => {
+    setTimeRemaining(prev => prev + 60) // Add 1 minute
+  }
+
+  const handleStop = async () => {
+    setStopping(true)
+    setVotingActive(false)
+    setVotingStopped(true)
+    setStopping(false)
+  }
+
+  const handleManualVote = (clanId: string, field: 'oath' | 'action', value: boolean | null) => {
+    setManualVotes(prev => ({
+      ...prev,
+      [clanId]: {
+        ...prev[clanId],
+        [field]: value
+      }
+    }))
   }
 
   const handleReveal = async () => {
@@ -107,6 +152,33 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     }
 
     setRevealing(true)
+
+    // First, insert manual votes for clans that didn't vote
+    for (const [clanId, manualVote] of Object.entries(manualVotes)) {
+      // Check if this clan already voted
+      const existing = votes.find(v => v.clan_id === clanId)
+      if (existing) continue // Skip if already voted
+
+      // Only insert if admin set both values
+      if (manualVote.oath !== null && manualVote.action !== null) {
+        const { error } = await supabase
+          .from('clan_votes')
+          .insert({
+            run_id: runId,
+            clan_id: clanId,
+            oath_of_allegiance: manualVote.oath,
+            initiate_actions: manualVote.action,
+            voted_at: new Date().toISOString()
+          })
+
+        if (error) {
+          console.error(`Error inserting manual vote for clan ${clanId}:`, error)
+        }
+      }
+    }
+
+    // Reload votes to include manual ones
+    await loadVotes()
 
     // Update all votes to revealed
     const { error } = await supabase
@@ -125,6 +197,7 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
       return
     }
 
+    setRevealed(true)
     alert('✅ Clan decisions revealed to all participants!')
   }
 
@@ -134,6 +207,12 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
 
   const getVotedCount = () => votes.length
   const getTotalCount = () => clans.length
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
 
   if (loading) {
     return (
@@ -171,7 +250,7 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
 
   return (
     <div className="space-y-6">
-      {/* Header with Reveal Button */}
+      {/* Header with Timer and Controls */}
       <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -183,38 +262,71 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
             </div>
           </div>
 
-          <div>
-            {revealed ? (
-              <div className="px-6 py-3 bg-amber-100 text-amber-900 border-4 border-amber-600 rounded-lg font-bold">
-                ✅ Revealed to All
+          {/* Timer (only show when voting active) */}
+          {votingActive && (
+            <div className="text-right">
+              <div className="text-3xl font-mono font-bold text-amber-900">
+                {formatTime(timeRemaining)}
               </div>
-            ) : (
+              <div className="text-xs text-amber-700">Time Remaining</div>
+            </div>
+          )}
+        </div>
+
+        {/* Control Buttons */}
+        <div className="flex gap-3 mb-4">
+          {votingActive && (
+            <>
               <button
-                onClick={handleReveal}
-                disabled={revealing || votes.length === 0}
-                className="px-6 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-amber-300 transition-colors font-bold text-lg"
+                onClick={handleExtend}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-bold"
               >
-                {revealing ? 'Revealing...' : '📢 Reveal Decisions'}
+                ⏱️ Extend (+1 min)
               </button>
-            )}
-          </div>
+              <button
+                onClick={handleStop}
+                disabled={stopping}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-300 transition-colors font-bold"
+              >
+                {stopping ? 'Stopping...' : '⏹️ Stop Voting'}
+              </button>
+            </>
+          )}
+
+          {votingStopped && !revealed && (
+            <button
+              onClick={handleReveal}
+              disabled={revealing}
+              className="px-6 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-amber-300 transition-colors font-bold text-lg"
+            >
+              {revealing ? 'Revealing...' : '✅ Confirm and Reveal Results'}
+            </button>
+          )}
+
+          {revealed && (
+            <div className="px-6 py-3 bg-green-100 text-green-900 border-4 border-green-600 rounded-lg font-bold">
+              ✅ Results Announced to Participants
+            </div>
+          )}
         </div>
 
         {/* Progress */}
-        <div className="bg-white rounded-lg p-4 border-2 border-amber-300">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-amber-900">Voting Progress</span>
-            <span className="text-amber-800">
-              {getVotedCount()} / {getTotalCount()} clans voted
-            </span>
+        {!revealed && (
+          <div className="bg-white rounded-lg p-4 border-2 border-amber-300">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-semibold text-amber-900">Voting Progress</span>
+              <span className="text-amber-800">
+                {getVotedCount()} / {getTotalCount()} clans voted
+              </span>
+            </div>
+            <div className="w-full bg-amber-200 rounded-full h-4 overflow-hidden">
+              <div
+                className="bg-amber-600 h-full transition-all duration-500"
+                style={{ width: `${(getVotedCount() / getTotalCount()) * 100}%` }}
+              />
+            </div>
           </div>
-          <div className="w-full bg-amber-200 rounded-full h-4 overflow-hidden">
-            <div
-              className="bg-amber-600 h-full transition-all duration-500"
-              style={{ width: `${(getVotedCount() / getTotalCount()) * 100}%` }}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Clan Voting Status */}
@@ -256,7 +368,46 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
 
                   {/* Vote Status */}
                   {!hasVoted ? (
-                    <div className="text-amber-700 italic">Awaiting vote...</div>
+                    votingStopped && !revealed ? (
+                      // Manual vote entry for clans that didn't vote
+                      <div className="space-y-3">
+                        <div className="text-red-700 font-semibold text-sm mb-2">
+                          ❌ Did not vote - Manual entry required:
+                        </div>
+
+                        {/* Oath dropdown */}
+                        <div>
+                          <label className="block text-xs text-neutral-600 mb-1">Oath of Allegiance:</label>
+                          <select
+                            value={manualVotes[clan.clan_id]?.oath === true ? 'true' : manualVotes[clan.clan_id]?.oath === false ? 'false' : ''}
+                            onChange={(e) => handleManualVote(clan.clan_id, 'oath', e.target.value === '' ? null : e.target.value === 'true')}
+                            className="w-full text-sm border-2 border-amber-300 rounded px-2 py-1"
+                          >
+                            <option value="">Select...</option>
+                            <option value="true">✅ Pledge Allegiance</option>
+                            <option value="false">❌ Refuse Allegiance</option>
+                          </select>
+                        </div>
+
+                        {/* Actions dropdown (only if clan has if_things_go_wrong) */}
+                        {clan.if_things_go_wrong && (
+                          <div>
+                            <label className="block text-xs text-neutral-600 mb-1">Initiate Actions:</label>
+                            <select
+                              value={manualVotes[clan.clan_id]?.action === true ? 'true' : manualVotes[clan.clan_id]?.action === false ? 'false' : ''}
+                              onChange={(e) => handleManualVote(clan.clan_id, 'action', e.target.value === '' ? null : e.target.value === 'true')}
+                              className="w-full text-sm border-2 border-amber-300 rounded px-2 py-1"
+                            >
+                              <option value="">Select...</option>
+                              <option value="true">⚔️ Act Against King</option>
+                              <option value="false">🕊️ Vote for Peace</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-amber-700 italic">Awaiting vote...</div>
+                    )
                   ) : revealed ? (
                     <div className="space-y-2">
                       {/* Oath of Allegiance */}
