@@ -1062,6 +1062,22 @@ export function ParticipantDashboard() {
 
       {/* Removed "View Results Announced" banner - reveal animation shows automatically */}
 
+      {/* King Decision Form (Phase 10) */}
+      {isKing && currentPhase && currentPhase.name.toLowerCase().includes('king') && currentPhase.name.toLowerCase().includes('decision') && (
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-b-4 border-amber-600">
+          <div className="container mx-auto px-4 py-8">
+            <KingDecisionForm
+              runId={runId!}
+              kingRoleId={role.role_id}
+              allRoles={allRoles}
+              onSubmitSuccess={() => {
+                alert('✅ Your royal decree has been recorded and sent to the admin for review!')
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Tab Navigation */}
       <div className="bg-white border-b border-neutral-200">
         <div className="container mx-auto px-4">
@@ -1637,6 +1653,18 @@ export function ParticipantDashboard() {
             setShowReveal(false)
             setElectionSequentialData(null)
           }}
+        />
+      )}
+
+      {/* King Decision Reveal */}
+      {showKingDecisionReveal && kingDecision && (
+        <KingDecisionReveal
+          decision={kingDecision}
+          kingRole={allRoles.find(r => r.role_id === kingDecision.king_role_id)!}
+          kingClan={allClans.find(c => c.clan_id === allRoles.find(r => r.role_id === kingDecision.king_role_id)?.clan_id) || null}
+          allRoles={allRoles}
+          clans={allClans}
+          onClose={() => setShowKingDecisionReveal(false)}
         />
       )}
     </div>
