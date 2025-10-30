@@ -704,6 +704,22 @@ export function FacilitatorSimulation() {
               </div>
             )}
 
+            {/* King's Decisions Review - Show when King is elected */}
+            {kingRole && (
+              <div className="mb-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-6">
+                <h2 className="text-2xl font-heading font-bold text-amber-900 mb-6 flex items-center gap-2">
+                  <span className="text-4xl">👑</span>
+                  <span>King's Decisions</span>
+                </h2>
+                <KingDecisionReview
+                  runId={runId!}
+                  kingRole={kingRole}
+                  allRoles={roles}
+                  clans={clans}
+                />
+              </div>
+            )}
+
             {/* Clan Nominations Voting (appears only in nomination phase) */}
             {currentPhase && currentPhase.name.toLowerCase().includes('nominate') ? (
               <>
@@ -749,22 +765,6 @@ export function FacilitatorSimulation() {
                   phaseDurationMinutes={currentPhase.actual_duration_minutes || currentPhase.default_duration_minutes}
                   allRoles={roles}
                   allClans={clans}
-                />
-              </div>
-            )}
-
-            {/* King's Decisions Review - Show when King is elected */}
-            {kingRole && (
-              <div className="mt-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-6">
-                <h2 className="text-2xl font-heading font-bold text-amber-900 mb-6 flex items-center gap-2">
-                  <span className="text-4xl">👑</span>
-                  <span>King's Decisions</span>
-                </h2>
-                <KingDecisionReview
-                  runId={runId!}
-                  kingRole={kingRole}
-                  allRoles={roles}
-                  clans={clans}
                 />
               </div>
             )}
