@@ -151,34 +151,13 @@ export function ElectionRevealAnimation({
     }
   }, [currentVoteIndex, voteSequence, isLoading, voteCounts, isOpenVoting, allRoles, clans, candidates])
 
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 z-50 bg-neutral-900 flex items-center justify-center">
-        <div className="text-white text-2xl font-heading">Loading results...</div>
-      </div>
-    )
-  }
-
+  // Calculate values needed for confetti hook (before early return)
   const resultsData = result.results_data as any
   const thresholdMet = resultsData?.threshold_met || false
   const winner = thresholdMet ? resultsData?.winner : null
-  const totalVotes = voteSequence.length
-  const progressPercent = totalVotes > 0 ? Math.round(((currentVoteIndex + 1) / totalVotes) * 100) : 0
-
-  // Detect if this is Vote 2 (final round)
   const isVote2 = session.proposal_title?.toLowerCase().includes('vote 2') || false
 
-  // Get runoff candidates from results_data (includes all tied candidates)
-  const runoffCandidatesData = resultsData?.runoff_candidates || []
-  const runoffCandidates = runoffCandidatesData.map((rc: any) => {
-    const candidate = candidates.find(c => c.role_id === rc.role_id)
-    return {
-      candidate: candidate!,
-      votes: rc.vote_count
-    }
-  })
-
-  // Trigger confetti for King election in Vote 2
+  // Trigger confetti for King election in Vote 2 (must be before early return)
   useEffect(() => {
     if (showFinalAnnouncement && thresholdMet && winner && isVote2) {
       const duration = 5000
@@ -211,6 +190,29 @@ export function ElectionRevealAnimation({
       return () => clearInterval(interval)
     }
   }, [showFinalAnnouncement, thresholdMet, winner, isVote2])
+
+  // Early return if still loading (must come after all hooks)
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-50 bg-neutral-900 flex items-center justify-center">
+        <div className="text-white text-2xl font-heading">Loading results...</div>
+      </div>
+    )
+  }
+
+  // Calculate remaining values after early return
+  const totalVotes = voteSequence.length
+  const progressPercent = totalVotes > 0 ? Math.round(((currentVoteIndex + 1) / totalVotes) * 100) : 0
+
+  // Get runoff candidates from results_data (includes all tied candidates)
+  const runoffCandidatesData = resultsData?.runoff_candidates || []
+  const runoffCandidates = runoffCandidatesData.map((rc: any) => {
+    const candidate = candidates.find(c => c.role_id === rc.role_id)
+    return {
+      candidate: candidate!,
+      votes: rc.vote_count
+    }
+  })
 
   // Function to reset animation
   const resetAnimation = () => {
