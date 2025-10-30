@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Home, RotateCcw } from 'lucide-react'
+import confetti from 'canvas-confetti'
 import type { VoteSession, VoteResult, Role, Clan } from '../../types/database'
 
 interface CoinAnimation {
@@ -164,6 +165,9 @@ export function ElectionRevealAnimation({
   const totalVotes = voteSequence.length
   const progressPercent = totalVotes > 0 ? Math.round(((currentVoteIndex + 1) / totalVotes) * 100) : 0
 
+  // Detect if this is Vote 2 (final round)
+  const isVote2 = session.proposal_title?.toLowerCase().includes('vote 2') || false
+
   // Get runoff candidates from results_data (includes all tied candidates)
   const runoffCandidatesData = resultsData?.runoff_candidates || []
   const runoffCandidates = runoffCandidatesData.map((rc: any) => {
@@ -173,6 +177,40 @@ export function ElectionRevealAnimation({
       votes: rc.vote_count
     }
   })
+
+  // Trigger confetti for King election in Vote 2
+  useEffect(() => {
+    if (showFinalAnnouncement && thresholdMet && winner && isVote2) {
+      const duration = 5000
+      const animationEnd = Date.now() + duration
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100 }
+
+      const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min
+
+      const interval = setInterval(() => {
+        const timeLeft = animationEnd - Date.now()
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval)
+        }
+
+        const particleCount = 50 * (timeLeft / duration)
+
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+        })
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+        })
+      }, 250)
+
+      return () => clearInterval(interval)
+    }
+  }, [showFinalAnnouncement, thresholdMet, winner, isVote2])
 
   // Function to reset animation
   const resetAnimation = () => {
@@ -364,86 +402,197 @@ export function ElectionRevealAnimation({
                 {thresholdMet && winner ? (
                   // Winner Announcement
                   <div>
-                    <motion.div
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ duration: 0.6, type: 'spring' }}
-                      className="text-9xl mb-8"
-                    >
-                      👑
-                    </motion.div>
-                    <h2 className="text-7xl font-heading font-bold text-amber-400 mb-4">
-                      {winner.name}
-                    </h2>
-                    <div className="text-4xl text-amber-300 mb-8">
-                      has been elected King of Kourion!
-                    </div>
-                    <div className="bg-gradient-to-b from-neutral-800 to-neutral-900 rounded-2xl p-8 border-4 border-amber-500 mb-8">
-                      <div className="text-7xl font-bold text-white mb-3">
-                        {winner.vote_count}
-                      </div>
-                      <div className="text-2xl text-neutral-300 mb-4">
-                        votes ({winner.percentage}%)
-                      </div>
-                      <div className="text-lg text-green-400">
-                        ✓ Exceeded threshold of {threshold} votes
-                      </div>
-                    </div>
+                    {isVote2 ? (
+                      // Vote 2: Special King Election Animation
+                      <>
+                        <motion.div
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ duration: 0.8 }}
+                          className="text-6xl font-heading font-bold text-amber-400 mb-8"
+                        >
+                          🎉 We have a new King! 🎉
+                        </motion.div>
+
+                        {/* Large fading avatar and name */}
+                        <motion.div
+                          initial={{ scale: 0.5, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ delay: 0.5, duration: 1 }}
+                        >
+                          <motion.img
+                            src={candidates.find(c => c.role_id === winner.role_id)?.avatar_url || '/placeholder-avatar.png'}
+                            alt={winner.name}
+                            className="w-64 h-64 rounded-full border-8 border-amber-500 object-cover mx-auto mb-8 shadow-2xl"
+                            animate={{
+                              scale: [1, 1.05, 1],
+                              boxShadow: [
+                                '0 0 60px rgba(251, 191, 36, 0.5)',
+                                '0 0 100px rgba(251, 191, 36, 0.8)',
+                                '0 0 60px rgba(251, 191, 36, 0.5)'
+                              ]
+                            }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                          />
+                          <motion.h2
+                            className="text-8xl font-heading font-bold text-amber-400 mb-6"
+                            animate={{
+                              opacity: [1, 0.8, 1],
+                              textShadow: [
+                                '0 0 20px rgba(251, 191, 36, 0.5)',
+                                '0 0 40px rgba(251, 191, 36, 0.8)',
+                                '0 0 20px rgba(251, 191, 36, 0.5)'
+                              ]
+                            }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                          >
+                            {winner.name}
+                          </motion.h2>
+                          <div className="text-3xl text-amber-300 mb-8">
+                            King of Kourion
+                          </div>
+                        </motion.div>
+
+                        <div className="bg-gradient-to-b from-neutral-800 to-neutral-900 rounded-2xl p-6 border-4 border-amber-500">
+                          <div className="text-5xl font-bold text-white mb-2">
+                            {winner.vote_count} votes
+                          </div>
+                          <div className="text-xl text-neutral-300">
+                            ({winner.percentage}%)
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      // Vote 1: Standard announcement
+                      <>
+                        <motion.div
+                          initial={{ scale: 0, rotate: -180 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{ duration: 0.6, type: 'spring' }}
+                          className="text-9xl mb-8"
+                        >
+                          👑
+                        </motion.div>
+                        <h2 className="text-7xl font-heading font-bold text-amber-400 mb-4">
+                          {winner.name}
+                        </h2>
+                        <div className="text-4xl text-amber-300 mb-8">
+                          has been elected King of Kourion!
+                        </div>
+                        <div className="bg-gradient-to-b from-neutral-800 to-neutral-900 rounded-2xl p-8 border-4 border-amber-500 mb-8">
+                          <div className="text-7xl font-bold text-white mb-3">
+                            {winner.vote_count}
+                          </div>
+                          <div className="text-2xl text-neutral-300 mb-4">
+                            votes ({winner.percentage}%)
+                          </div>
+                          <div className="text-lg text-green-400">
+                            ✓ Exceeded threshold of {threshold} votes
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : (
-                  // Runoff Announcement
+                  // No Winner Announcement
                   <div>
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ duration: 0.6 }}
-                      className="text-9xl mb-8"
-                    >
-                      ⚖️
-                    </motion.div>
-                    <h2 className="text-6xl font-heading font-bold text-amber-400 mb-6">
-                      Runoff Vote Required
-                    </h2>
-                    <div className="bg-gradient-to-b from-neutral-800 to-neutral-900 rounded-2xl p-6 border-4 border-amber-600 mb-6">
-                      <div className="text-xl text-neutral-300 mb-4">
-                        No candidate reached {threshold} votes
-                      </div>
-                      <div className="text-3xl font-bold text-amber-400 mb-6">
-                        {runoffCandidates.length} Candidates Advance
-                      </div>
-                      <div className={`grid gap-4 ${runoffCandidates.length === 2 ? 'grid-cols-2' : runoffCandidates.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                        {runoffCandidates.map((item, index) => {
-                          const clan = clans.find(c => c.clan_id === item.candidate.clan_id)
-                          const medals = ['🥇', '🥈', '🥉', '🏅', '🏅']
-                          return (
-                            <div
-                              key={item.candidate.role_id}
-                              className="bg-neutral-700 rounded-lg p-3 border-2 border-amber-500"
-                            >
-                              <div className="text-4xl mb-2">{medals[index] || '🏅'}</div>
-                              <img
-                                src={item.candidate.avatar_url || '/placeholder-avatar.png'}
-                                alt={item.candidate.name}
-                                className="w-16 h-16 rounded-full border-3 object-cover mx-auto mb-2"
-                                style={{ borderColor: clan?.color_hex || '#8B7355' }}
-                              />
-                              <div className="text-lg font-bold text-white mb-1">
-                                {item.candidate.name}
-                              </div>
-                              <div className="text-xs text-neutral-400 mb-2">
-                                {clan?.name}
-                              </div>
-                              <div className="text-2xl font-bold text-amber-400">
-                                {item.votes} votes
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    <div className="text-xl text-neutral-400">
-                      Proceed to the next voting round
-                    </div>
+                    {isVote2 ? (
+                      // Vote 2: Sad animation - no King elected
+                      <>
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 1 }}
+                          className="text-7xl mb-8"
+                        >
+                          😔
+                        </motion.div>
+                        <motion.h2
+                          className="text-5xl font-heading font-bold text-neutral-400 mb-6"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 0.5, duration: 1 }}
+                        >
+                          Our Glorious City State
+                        </motion.h2>
+                        <motion.div
+                          className="text-4xl text-neutral-500 mb-8"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 1, duration: 1 }}
+                        >
+                          has Remained Without a King
+                        </motion.div>
+                        <motion.div
+                          className="bg-gradient-to-b from-neutral-800 to-neutral-900 rounded-2xl p-6 border-4 border-neutral-600"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 1.5, duration: 0.8 }}
+                        >
+                          <div className="text-2xl text-neutral-400 mb-4">
+                            No candidate reached the required threshold
+                          </div>
+                          <div className="text-xl text-neutral-500">
+                            {threshold} votes needed to elect a King
+                          </div>
+                        </motion.div>
+                      </>
+                    ) : (
+                      // Vote 1: Runoff Announcement
+                      <>
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ duration: 0.6 }}
+                          className="text-9xl mb-8"
+                        >
+                          ⚖️
+                        </motion.div>
+                        <h2 className="text-6xl font-heading font-bold text-amber-400 mb-6">
+                          Runoff Vote Required
+                        </h2>
+                        <div className="bg-gradient-to-b from-neutral-800 to-neutral-900 rounded-2xl p-6 border-4 border-amber-600 mb-6">
+                          <div className="text-xl text-neutral-300 mb-4">
+                            No candidate reached {threshold} votes
+                          </div>
+                          <div className="text-3xl font-bold text-amber-400 mb-6">
+                            {runoffCandidates.length} Candidates Advance
+                          </div>
+                          <div className={`grid gap-4 ${runoffCandidates.length === 2 ? 'grid-cols-2' : runoffCandidates.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                            {runoffCandidates.map((item, index) => {
+                              const clan = clans.find(c => c.clan_id === item.candidate.clan_id)
+                              const medals = ['🥇', '🥈', '🥉', '🏅', '🏅']
+                              return (
+                                <div
+                                  key={item.candidate.role_id}
+                                  className="bg-neutral-700 rounded-lg p-3 border-2 border-amber-500"
+                                >
+                                  <div className="text-4xl mb-2">{medals[index] || '🏅'}</div>
+                                  <img
+                                    src={item.candidate.avatar_url || '/placeholder-avatar.png'}
+                                    alt={item.candidate.name}
+                                    className="w-16 h-16 rounded-full border-3 object-cover mx-auto mb-2"
+                                    style={{ borderColor: clan?.color_hex || '#8B7355' }}
+                                  />
+                                  <div className="text-lg font-bold text-white mb-1">
+                                    {item.candidate.name}
+                                  </div>
+                                  <div className="text-xs text-neutral-400 mb-2">
+                                    {clan?.name}
+                                  </div>
+                                  <div className="text-2xl font-bold text-amber-400">
+                                    {item.votes} votes
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                        <div className="text-xl text-neutral-400">
+                          Proceed to the next voting round
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
