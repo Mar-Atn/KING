@@ -1084,7 +1084,7 @@ export function ParticipantDashboard() {
               allRoles={allRoles}
               clans={allClans}
               onSubmitSuccess={() => {
-                alert('✅ Your royal decree has been recorded and sent to the admin for review!')
+                // Success message handled in KingDecisionForm component
               }}
             />
           </div>

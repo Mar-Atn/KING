@@ -151,9 +151,8 @@ export function KingDecisionReview({ runId, kingRole, allRoles, clans }: KingDec
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <span className="text-4xl">👑</span>
               <h3 className="text-3xl font-heading font-bold text-amber-900">
-                King's Royal Decree
+                King's Decisions
               </h3>
             </div>
             <div className="text-amber-800 text-lg">

@@ -66,9 +66,8 @@ export function KingDecisionReveal({
           transition={{ duration: 0.8 }}
           className="text-center mb-8"
         >
-          <div className="text-8xl mb-4">👑</div>
           <h1 className="text-5xl font-heading font-bold text-amber-400 mb-4">
-            Royal Decree
+            King's Decisions
           </h1>
           <div className="flex items-center justify-center gap-4 mb-2">
             {kingRole.avatar_url && (

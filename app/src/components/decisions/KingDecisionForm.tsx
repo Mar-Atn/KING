@@ -198,7 +198,7 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, clans, onSubmitS
       return
     }
 
-    alert('✅ Your royal decree has been recorded!')
+    alert('✅ Your Decisions Are Clear!')
     onSubmitSuccess()
   }
 
@@ -215,9 +215,8 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, clans, onSubmitS
     <div className="max-w-4xl mx-auto">
       <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-8 mb-6">
         <div className="text-center mb-6">
-          <div className="text-6xl mb-3">👑</div>
           <h2 className="text-4xl font-heading font-bold text-amber-900 mb-2">
-            Royal Decree
+            King's Decisions
           </h2>
           <p className="text-xl text-amber-800">
             As the newly elected King, you must now make the key decisions for Kourion
@@ -473,7 +472,7 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, clans, onSubmitS
             disabled={loading}
             className="px-12 py-4 bg-amber-600 text-white text-xl font-heading font-bold rounded-lg hover:bg-amber-700 disabled:bg-amber-300 transition-colors shadow-lg"
           >
-            {loading ? 'Saving...' : existingDecision ? '✅ Update Royal Decree' : '👑 Submit Royal Decree'}
+            {loading ? 'Saving...' : existingDecision ? '✅ Update Decisions' : 'Submit Decisions'}
           </button>
         </div>
       </form>

@@ -59,6 +59,7 @@ export function FacilitatorSimulation() {
       'This will:\n' +
       '• Delete all votes for this phase\n' +
       '• Delete all voting sessions\n' +
+      '• Delete King\'s Decisions (if any)\n' +
       '• Reset the phase timer\n' +
       '• Reset the phase to fresh state\n\n' +
       'Continue?'
@@ -98,6 +99,12 @@ export function FacilitatorSimulation() {
           .delete()
           .eq('phase_id', currentPhase.phase_id)
       }
+
+      // Delete King's Decisions for this run
+      await supabase
+        .from('king_decisions')
+        .delete()
+        .eq('run_id', runId)
 
       // Reset the phase timer and status
       const newStartedAt = new Date().toISOString()
@@ -707,9 +714,8 @@ export function FacilitatorSimulation() {
             {/* King's Decisions Review - Show when King is elected */}
             {kingRole && (
               <div className="mb-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-6">
-                <h2 className="text-2xl font-heading font-bold text-amber-900 mb-6 flex items-center gap-2">
-                  <span className="text-4xl">👑</span>
-                  <span>King's Decisions</span>
+                <h2 className="text-2xl font-heading font-bold text-amber-900 mb-6">
+                  King's Decisions
                 </h2>
                 <KingDecisionReview
                   runId={runId!}
