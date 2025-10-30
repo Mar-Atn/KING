@@ -8,7 +8,7 @@
 ## DOCUMENT PURPOSE
 
 This document provides complete implementation details for The New King SIM data layer, serving as:
-- **Complete schema reference** - All 20 tables with DDL extracted from 45 migration files
+- **Complete schema reference** - All 21 tables with DDL extracted from 50 migration files
 - **RLS security model** - All 59 Row-Level Security policies documented
 - **Database functions** - All 15+ PL/pgSQL functions and triggers
 - **Data flow patterns** - How frontend interacts with database
@@ -57,10 +57,11 @@ This document provides complete implementation details for The New King SIM data
 - `votes` - Individual ballot records
 - `vote_results` - Calculated tallies and winners
 
-**AI & Meta Tables (5):** AI cognition and outcomes
+**AI & Meta Tables (6):** AI cognition and outcomes
 - `ai_context` - Versioned cognitive state for AI participants
 - `ai_prompts` - Centralized AI prompt management
 - `sim_run_prompts` - Per-simulation AI prompt overrides
+- `conversations` - AI Character Prototype conversation tracking (text, voice, combined)
 - `king_decisions` - King's final decisions after election
 - `reflections` - Participant reflections for learning assessment
 
@@ -85,11 +86,11 @@ sim_runs ←──────────┐
     ├───────────┐   │
     ↓           ↓   │
   roles ←───────┘   │
-    ├───────────────┼─────┬─────┬──────┬───────┬─────────────┐
-    ↓               ↓     ↓     ↓      ↓       ↓             ↓
-meetings    vote_sessions │  king_decisions  reflections  ai_context
-    ↓                     │                                  ↓
-meeting_invitations       │                            ai_prompts
+    ├───────────────┼─────┬─────┬──────┬───────┬──────────────┬─────────────┐
+    ↓               ↓     ↓     ↓      ↓       ↓              ↓             ↓
+meetings    vote_sessions │  king_decisions  reflections  conversations  ai_context
+    ↓                     │                                                  ↓
+meeting_invitations       │                                            ai_prompts
                          ↓
                       votes
                          ↓
@@ -642,9 +643,16 @@ CREATE INDEX idx_ai_context_block4 ON ai_context USING GIN(block_4_goals);
 CREATE TABLE ai_prompts (
   prompt_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   prompt_type TEXT NOT NULL CHECK (prompt_type IN (
+    -- Original prompt types (backward compatibility)
     'block_1_fixed', 'block_2_identity_update', 'block_3_memory_update',
-    'block_4_goals_update', 'action_clan_nomination', 'action_meeting_invitation',
-    'action_meeting_response', 'action_election_vote', 'action_king_decisions'
+    'block_4_goals_update', 'action_decision', 'public_speech',
+    'personal_feedback', 'debrief_analysis', 'induction_assistant',
+
+    -- AI Character Prototype prompt types (added migration 00050)
+    'block_1_simulation_rules', 'block_1_available_actions', 'block_1_behavioral_framework',
+    'block_3_memory_compression', 'block_4_goals_adaptation',
+    'text_conversation_system', 'initial_goals_generation',
+    'voice_agent_system', 'intent_notes_generation'
   )),
   version TEXT NOT NULL DEFAULT 'v1.0',
   is_active BOOLEAN NOT NULL DEFAULT FALSE,
@@ -673,7 +681,8 @@ CREATE UNIQUE INDEX idx_ai_prompts_active_unique ON ai_prompts(prompt_type) WHER
 **Key Points:**
 - Centralized prompt management with versioning
 - Only ONE active prompt per `prompt_type` (enforced by unique index)
-- 9 prompt types covering all AI operations
+- 18 prompt types total: 9 original + 9 AI Character Prototype (migration 00050)
+- AI Character Prototype uses granular prompts for 4-Block system
 - Supports LLM model, temperature, max_tokens configuration
 
 ---
@@ -774,6 +783,66 @@ CREATE INDEX idx_reflections_role_phase ON reflections(role_id, phase_id);
 - Three types: personal (participant), group (collective), ai_generated (feedback)
 - Full-text search index on `reflection_text` for semantic analysis
 - `ai_insights` JSONB field for structured AI analysis
+
+---
+
+#### `conversations` - AI Character Prototype Conversation Tracking
+
+```sql
+CREATE TABLE IF NOT EXISTS conversations (
+  -- Identity
+  conversation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role_id UUID NOT NULL REFERENCES roles(role_id) ON DELETE CASCADE,
+
+  -- Timing
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at TIMESTAMPTZ,
+  duration_seconds INTEGER,
+
+  -- Conversation Type
+  modality TEXT NOT NULL CHECK (modality IN ('text', 'voice', 'combined')),
+
+  -- Content
+  transcript JSONB NOT NULL DEFAULT '[]'::jsonb,
+  elevenlabs_conversation_id TEXT,
+
+  -- AI Context Integration
+  reflection_triggered BOOLEAN NOT NULL DEFAULT FALSE,
+  ai_context_version_before INTEGER,
+  ai_context_version_after INTEGER,
+
+  -- Performance Metrics
+  total_messages INTEGER,
+  avg_response_time_seconds DECIMAL(5,2),
+  total_tokens_used INTEGER,
+  estimated_cost_usd DECIMAL(10,4),
+
+  -- Simulation Integration
+  scenario_injected JSONB,
+  notes TEXT,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_conversations_role ON conversations(role_id);
+CREATE INDEX idx_conversations_started ON conversations(started_at DESC);
+CREATE INDEX idx_conversations_modality ON conversations(modality);
+CREATE INDEX idx_conversations_role_started ON conversations(role_id, started_at DESC);
+CREATE INDEX idx_conversations_reflection ON conversations(reflection_triggered) WHERE reflection_triggered = TRUE;
+CREATE INDEX idx_conversations_transcript ON conversations USING GIN(transcript);
+CREATE INDEX idx_conversations_scenario ON conversations USING GIN(scenario_injected);
+```
+
+**Key Points:**
+- Added in migration 00048 for AI Character Prototype
+- Tracks all text, voice, and combined conversations with AI characters
+- `transcript` JSONB stores full conversation history
+- Links to AI context versioning (`ai_context_version_before/after`)
+- `reflection_triggered` tracks when Reflection Engine ran (updates Blocks 2-4)
+- Supports ElevenLabs voice conversations via `elevenlabs_conversation_id`
+- Performance metrics track tokens, response times, costs
+- `scenario_injected` stores facilitator interventions during conversation
 
 ---
 
