@@ -7,6 +7,7 @@ import { PhaseControls } from '../components/PhaseControls'
 import { VotingControls } from '../components/voting/VotingControls'
 import { ClanNominationsControls } from '../components/voting/ClanNominationsControls'
 import { ElectionRoundControls } from '../components/voting/ElectionRoundControls'
+import { KingDecisionReview } from '../components/decisions/KingDecisionReview'
 import type { SimRun, Clan, Role } from '../types/database'
 
 export function FacilitatorSimulation() {
@@ -17,6 +18,7 @@ export function FacilitatorSimulation() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [electionCandidates, setElectionCandidates] = useState<Role[]>([])
+  const [kingRole, setKingRole] = useState<Role | null>(null)
 
   const { loadPhases, allPhases, currentPhase } = usePhaseStore()
   const { connectionStatus } = usePhaseSync(runId || null)
@@ -506,6 +508,63 @@ export function FacilitatorSimulation() {
     }
   }, [currentPhase, allPhases])
 
+  // Detect elected King from Vote 2 results
+  useEffect(() => {
+    if (!runId || !allPhases.length || !roles.length) return
+
+    const detectKing = async () => {
+      try {
+        // Find Vote 2 phase
+        const vote2Phase = allPhases.find(p => p.name === 'Vote 2')
+        if (!vote2Phase) {
+          setKingRole(null)
+          return
+        }
+
+        // Get Vote 2 session
+        const { data: session } = await supabase
+          .from('vote_sessions')
+          .select('session_id')
+          .eq('phase_id', vote2Phase.phase_id)
+          .eq('status', 'announced')
+          .maybeSingle()
+
+        if (!session) {
+          setKingRole(null)
+          return
+        }
+
+        // Get Vote 2 result
+        const { data: result } = await supabase
+          .from('vote_results')
+          .select('results_data')
+          .eq('session_id', session.session_id)
+          .single()
+
+        if (!result || !result.results_data) {
+          setKingRole(null)
+          return
+        }
+
+        // Check if King was elected (threshold met)
+        const resultsData = result.results_data as any
+        if (resultsData.threshold_met && resultsData.winner) {
+          const kingRoleId = resultsData.winner.role_id
+          const king = roles.find(r => r.role_id === kingRoleId)
+          setKingRole(king || null)
+          console.log('👑 King detected:', king?.name)
+        } else {
+          setKingRole(null)
+        }
+      } catch (err) {
+        console.error('Error detecting King:', err)
+        setKingRole(null)
+      }
+    }
+
+    detectKing()
+  }, [runId, allPhases, roles])
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -690,6 +749,22 @@ export function FacilitatorSimulation() {
                   phaseDurationMinutes={currentPhase.actual_duration_minutes || currentPhase.default_duration_minutes}
                   allRoles={roles}
                   allClans={clans}
+                />
+              </div>
+            )}
+
+            {/* King's Decisions Review - Show when King is elected */}
+            {kingRole && (
+              <div className="mt-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-6">
+                <h2 className="text-2xl font-heading font-bold text-amber-900 mb-6 flex items-center gap-2">
+                  <span className="text-4xl">👑</span>
+                  <span>King's Decisions</span>
+                </h2>
+                <KingDecisionReview
+                  runId={runId!}
+                  kingRole={kingRole}
+                  allRoles={roles}
+                  clans={clans}
                 />
               </div>
             )}
