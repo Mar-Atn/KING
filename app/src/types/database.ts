@@ -290,6 +290,7 @@ export interface KingDecision {
   international_affairs: Json
   other_decisions: string | null
   final_speech_transcript: string | null
+  revealed: boolean
   created_at: string
 }
 
