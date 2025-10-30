@@ -1063,6 +1063,18 @@ export function ParticipantDashboard() {
       {/* Removed "View Results Announced" banner - reveal animation shows automatically */}
 
       {/* King Decision Form (Phase 10) */}
+      {(() => {
+        const hasKing = currentPhase?.name.toLowerCase().includes('king')
+        const hasDecision = currentPhase?.name.toLowerCase().includes('decision')
+        console.log('👑 King Form Visibility Check:', {
+          isKing,
+          currentPhase: currentPhase?.name,
+          hasKing,
+          hasDecision,
+          allConditionsMet: isKing && currentPhase && hasKing && hasDecision
+        })
+        return null
+      })()}
       {isKing && currentPhase && currentPhase.name.toLowerCase().includes('king') && currentPhase.name.toLowerCase().includes('decision') && (
         <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-b-4 border-amber-600">
           <div className="container mx-auto px-4 py-8">
