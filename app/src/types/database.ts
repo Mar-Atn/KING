@@ -294,6 +294,18 @@ export interface KingDecision {
   created_at: string
 }
 
+export interface ClanVote {
+  vote_id: string
+  run_id: string
+  clan_id: string
+  oath_of_allegiance: boolean | null
+  initiate_actions: boolean | null
+  voted_at: string | null
+  revealed: boolean
+  revealed_at: string | null
+  created_at: string
+}
+
 export interface Reflection {
   reflection_id: string
   run_id: string
