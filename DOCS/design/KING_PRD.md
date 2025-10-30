@@ -194,8 +194,13 @@ SIM Design:
 - Eng or Ru language [optional, start with ENG]
 - Number of clans (4-5-6)
 - Number of roles and selection of roles by clans (5(for testing) - 32, could use pre-set cases, when chose number - automatically set up the players/clans)
-- Set the required majority threshold for election (default: two-thirds in the first round, simple majority in the second)- Assignment of AI characters to roles (as many as needed). By default, this threshold is presented in-game as the sacred rule of election and can be adjusted by the admin within predefined bounds.
-- Adjustment of timing for each stage (an be auto-adjusted proportionally when setting total duration)
+- **Voting Thresholds:**
+  - `vote_1_threshold`: Required votes for first election round (default: 2/3 of total participants, configurable per simulation)
+  - `vote_2_threshold`: Required votes for second election round (default: 2/3 of total participants, configurable per simulation)
+  - Stored in `sim_runs` table for per-simulation configuration
+  - Thresholds presented in-game as the sacred rule of election and can be adjusted by the facilitator within predefined bounds
+- Assignment of AI characters to roles (as many as needed)
+- Adjustment of timing for each stage (can be auto-adjusted proportionally when setting total duration)
 - Setting up to 3 main learning objectives (just writing down as text)
 - Admin shall be able to review and adjust any element in DB (e.g. interest of a clan or of a role). Any such adjustment triggers a configuration checksum and is logged in the SIM instance metadata.
 
@@ -217,6 +222,22 @@ Once customisation and set up is completed and approved by the admin - the SIM b
 
 ### 4.6 Voting Logic & Decision Flow
 - The precise voting and decision flow, including thresholds and fallback logic, is defined in KING_Process.csv.
+
+**Vote Transparency Controls (Implemented):**
+- **transparency_level**: Configurable per vote_session
+  - `open` - All votes visible in real-time
+  - `anonymous` - Votes shown without voter identity
+  - `secret` - Votes hidden until facilitator reveals
+- **reveal_timing**: When results are shown
+  - `immediate` - As votes are cast
+  - `after_all_votes` - When all participants have voted (default)
+  - `facilitator_manual` - Facilitator controls reveal timing
+- **animation_speed**: Control dramatic effect
+  - `slow` - 10 seconds per vote reveal
+  - `normal` - 5 seconds per vote reveal (default)
+  - `fast` - 2 seconds per vote reveal
+  - `instant` - No animation, immediate display
+- **allow_skip_animation**: Participants can skip vote reveal animation (default: false)
 
 
 ## 5. Simulation Design Integrity & Version Control
@@ -364,6 +385,10 @@ Allow the facilitator to create simulation instances from templates with instanc
   - Stage durations and total time (customize from template defaults)
   - Sacred voting threshold (default two-thirds / adjustable)
   - Learning objectives (text fields for this specific run)
+- **Printable Materials:** Configure visual assets for offline use
+  - `emblem_url` for digital display (web interface)
+  - `logo_url` for high-resolution printable materials (clan reference sheets, character cards)
+  - Distinction allows optimized assets for different use cases
 - Validate configuration integrity (Section 5 checks)
 - Approve and lock instance for launch
 
@@ -1096,10 +1121,10 @@ Detailed schema and data pipelines will be developed in the **KING_TECH_GUIDE.md
 
 | Entity | Description | Key Attributes |
 |--------|--------------|----------------|
-| **Simulation Run (`SIM_RUN`)** | Single execution instance of the simulation; immutable once launched. | run_id, version, start/end timestamps, configuration snapshot, facilitator_id |
+| **Simulation Run (`SIM_RUN`)** | Single execution instance of the simulation; immutable once launched. | run_id, version, start/end timestamps, configuration snapshot, facilitator_id, vote_1_threshold, vote_2_threshold, learning_objectives |
 | **Stage (`PHASE`)** | Represents one discrete phase (e.g., Clan Council, Vote 1). | phase_id, name, description, default_duration, start_ts, end_ts |
 | **Participant (`ROLE`)** | Human or AI character taking part in the simulation. | role_id, name, clan_id, is_ai, traits, status, device_session_id |
-| **Clan (`CLAN`)** | Group identity linking roles and shared objectives. | clan_id, name, description, alignment, priorities |
+| **Clan (`CLAN`)** | Group identity linking roles and shared objectives. | clan_id, name, description, alignment, priorities, emblem_url, logo_url, color_hex |
 | **Meeting (`MEETING`)** | Multi-party conversation event (voice/text). | meeting_id, organizer_role_id, participants[], start_ts, end_ts, transcript_ref |
 | **Direct Message (`DM`)** | One-to-one message exchange. | dm_id, sender_role_id, receiver_role_id, text, ts |
 | **Broadcast (`BROADCAST`)** | Public speech or announcement. | broadcast_id, speaker_role_id, phase_id, transcript_ref, audio_url |

@@ -4,7 +4,7 @@ Stage #,Stage Name,Stage Description,Pre-set Timing (minutes),Phase Category
 2,Free Consultations 1,All clans may discuss negotiate form alliances,15,active_play
 3,Clans nominate candidates (decision),Each clan announces their nominated candidate,5,active_play
 4,Candidate Speeches 1,Each candidate has 2 minutes to present their program,15,active_play
-5,Vote 1,Open voting - need 10+ votes to win. If no winner two candidates with highest votes proceed,10,active_play
+5,Vote 1,Open voting. If no winner two candidates with highest votes proceed,10,active_play
 6,Clan Councils 2,Each clan meets privately to discuss strategy for second round,10,active_play
 7,Free Consultations 2,Final discussions between clans,15,active_play
 8,Candidate Speeches 2,Top 2 candidates get 3 minutes each for final speeches,10,active_play

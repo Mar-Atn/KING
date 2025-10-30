@@ -15,8 +15,9 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getRoleForUser } from '../lib/data/participants'
 import { PhaseChangeModal } from '../components/PhaseChangeModal'
-import { PhaseTimer } from '../components/PhaseTimer'
 import { Ballot } from '../components/voting/Ballot'
+import { usePhaseStore } from '../stores/phaseStore'
+import { Clock } from 'lucide-react'
 import { ResultsDisplay } from '../components/voting/ResultsDisplay'
 import { ClanNominationsReveal } from '../components/voting/ClanNominationsReveal'
 import { ElectionWinnerReveal } from '../components/voting/ElectionWinnerReveal'
@@ -29,6 +30,9 @@ export function ParticipantDashboard() {
   const { runId } = useParams<{ runId: string }>()
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+
+  // Use phaseStore for timer (same as admin)
+  const { timer } = usePhaseStore()
 
   const [activeTab, setActiveTab] = useState<Tab>('role')
   const [role, setRole] = useState<Role | null>(null)
@@ -191,6 +195,11 @@ export function ParticipantDashboard() {
         setAllClans(clansResult.data || [])
         setAllRoles(allRolesResult.data || [])
         setPhases(phasesResult.data || [])
+
+        // Load phaseStore for timer (same as admin)
+        if (runId) {
+          usePhaseStore.getState().loadPhases(runId)
+        }
 
         // Filter clan members from allRoles (no extra query needed)
         const clanMembersFiltered = (allRolesResult.data || [])
@@ -862,10 +871,21 @@ export function ParticipantDashboard() {
             <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl px-6 py-5 border-2 border-amber-200 shadow-md relative">
               {currentPhase ? (
                 <div>
-                  {/* Compact Timer - Upper Right */}
-                  <div className="absolute top-4 right-4">
-                    <PhaseTimer phase={currentPhase} compact={true} />
-                  </div>
+                  {/* Compact Timer - Upper Right (same as admin) */}
+                  {timer.isActive && timer.remainingSeconds > 0 && (
+                    <div className="absolute top-4 right-4">
+                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
+                        timer.remainingSeconds <= 60 ? 'text-warning bg-warning/10 border-warning' :
+                        timer.remainingSeconds <= 300 ? 'text-accent bg-accent/10 border-accent' :
+                        'text-success bg-success/10 border-success'
+                      }`}>
+                        <Clock className="w-4 h-4" />
+                        <span className="font-mono font-semibold text-sm">
+                          {Math.floor(timer.remainingSeconds / 60)}:{(timer.remainingSeconds % 60).toString().padStart(2, '0')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />

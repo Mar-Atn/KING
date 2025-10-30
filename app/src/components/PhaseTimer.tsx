@@ -26,24 +26,83 @@ export function PhaseTimer({ phase, className = '', compact = false }: PhaseTime
   const [isOvertime, setIsOvertime] = useState(false)
 
   useEffect(() => {
-    if (!phase || !phase.started_at) {
+    // Only show timer if phase is active and has started_at timestamp
+    if (!phase || !phase.started_at || phase.status !== 'active') {
       setTimeRemaining(null)
+      setIsOvertime(false)
       return
     }
 
     const calculateTimeRemaining = () => {
-      const startedAt = new Date(phase.started_at!).getTime()
-      const durationMinutes = phase.actual_duration_minutes || phase.default_duration_minutes || 0
-      const endTime = startedAt + (durationMinutes * 60 * 1000)
-      const now = Date.now()
-      const remaining = Math.floor((endTime - now) / 1000) // seconds
+      try {
+        const now = Date.now()
+        const startedAt = new Date(phase.started_at!).getTime()
 
-      if (remaining < 0) {
-        setIsOvertime(true)
-        setTimeRemaining(Math.abs(remaining)) // Show how much overtime
-      } else {
+        // Validate started_at is not in the future
+        if (startedAt > now + 60000) { // Allow 1 minute tolerance for clock skew
+          console.warn('PhaseTimer: started_at is in the future', { startedAt: new Date(startedAt), now: new Date(now) })
+          setTimeRemaining(null)
+          return
+        }
+
+        // Get phase duration in minutes
+        const durationMinutes = phase.actual_duration_minutes || phase.default_duration_minutes || 0
+
+        if (durationMinutes <= 0) {
+          console.warn('PhaseTimer: Invalid duration', { durationMinutes })
+          setTimeRemaining(null)
+          return
+        }
+
+        // Calculate end time
+        const durationMs = durationMinutes * 60 * 1000
+        const endTime = startedAt + durationMs
+
+        // Calculate remaining time in seconds
+        const remainingMs = endTime - now
+        const remainingSeconds = Math.floor(remainingMs / 1000)
+
+        // Hide timer if data is clearly stale (overtime > 2 hours or remaining > duration + 2 hours)
+        // This indicates the phase hasn't been properly restarted
+        const twoHoursInSeconds = 2 * 60 * 60
+        const expectedMaxRemaining = (durationMinutes * 60) + twoHoursInSeconds
+
+        if (remainingSeconds < -twoHoursInSeconds) {
+          // Phase is more than 2 hours overtime - data is stale
+          console.warn('PhaseTimer: Phase is significantly overtime, hiding timer', {
+            phaseName: phase.name,
+            remainingSeconds,
+            overtimeHours: Math.abs(remainingSeconds) / 3600
+          })
+          setTimeRemaining(null)
+          return
+        }
+
+        if (remainingSeconds > expectedMaxRemaining) {
+          // Remaining time is way too large - started_at is likely wrong
+          console.warn('PhaseTimer: Remaining time exceeds expected maximum, hiding timer', {
+            phaseName: phase.name,
+            remainingSeconds,
+            expectedMaxRemaining,
+            remainingHours: remainingSeconds / 3600
+          })
+          setTimeRemaining(null)
+          return
+        }
+
+        if (remainingSeconds < 0) {
+          // Phase is overtime (but less than 2 hours - reasonable)
+          setIsOvertime(true)
+          setTimeRemaining(Math.abs(remainingSeconds))
+        } else {
+          // Phase is ongoing
+          setIsOvertime(false)
+          setTimeRemaining(remainingSeconds)
+        }
+      } catch (error) {
+        console.error('PhaseTimer: Error calculating time', error)
+        setTimeRemaining(null)
         setIsOvertime(false)
-        setTimeRemaining(remaining)
       }
     }
 

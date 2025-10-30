@@ -521,15 +521,17 @@ export function useVoting(options: UseVotingOptions = {}) {
     try {
       setLoading(true)
 
-      const query = supabase
+      let query = supabase
         .from('vote_sessions')
         .select('*')
         .eq('run_id', runId)
-        .order('created_at', { ascending: false })
 
+      // Filter by phase if provided
       if (phaseId) {
-        query.eq('phase_id', phaseId)
+        query = query.eq('phase_id', phaseId)
       }
+
+      query = query.order('created_at', { ascending: false })
 
       const { data, error: sessionsError } = await query
 

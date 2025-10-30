@@ -252,212 +252,1150 @@ Testing: Vitest (unit), Playwright (E2E)
 **📚 Complete Implementation Reference:**
 For complete DDL, indexes, RLS policies, database functions, and JSONB query patterns, see **[KING_DATA_ARCHITECTURE.md](./KING_DATA_ARCHITECTURE.md)** - the single source of truth for all data layer implementation details.
 
-### 3.2 Table Categories & Relationships
+### 3.2 Core Tables
 
-The KING SIM database consists of **20 tables** organized into 5 functional categories:
+#### 3.2.1 `sim_runs` (Simulation Instance)
 
-#### **Core Tables (6)** - Simulation Foundation
-| Table | Purpose | Key Relationships |
-|-------|---------|-------------------|
-| `sim_runs` | Simulation instances with immutable configuration | Root entity, referenced by all other tables |
-| `users` | Facilitators and participants (linked to Supabase Auth) | Referenced by `sim_runs.facilitator_id`, `roles.assigned_user_id` |
-| `access_tokens` | QR code device access tokens (24-hour expiry) | References `users.id` |
-| `clans` | Faction definitions | References `sim_runs.run_id` |
-| `roles` | Individual character definitions (human or AI) | References `sim_runs.run_id`, `clans.clan_id`, `users.id` |
-| `phases` | Sequential stage definitions | References `sim_runs.run_id` |
-
-#### **Interaction Tables (3)** - Communication & Coordination
-| Table | Purpose | Key Relationships |
-|-------|---------|-------------------|
-| `meetings` | Group conversations (voice or text) | References `sim_runs.run_id`, `phases.phase_id`, `roles.role_id` |
-| `meeting_invitations` | Meeting requests and responses | References `meetings.meeting_id`, `roles.role_id` |
-| `public_speeches` | Broadcast messages and candidate speeches | References `sim_runs.run_id`, `phases.phase_id`, `roles.role_id` |
-
-#### **Voting Tables (3)** - Democratic Decision-Making
-| Table | Purpose | Key Relationships |
-|-------|---------|-------------------|
-| `vote_sessions` | Voting round configuration | References `sim_runs.run_id`, `phases.phase_id`, `clans.clan_id` |
-| `votes` | Individual ballot records | References `vote_sessions.session_id`, `roles.role_id`, `clans.clan_id` |
-| `vote_results` | Calculated tallies and winners | References `vote_sessions.session_id`, `users.id` |
-
-#### **AI & Meta Tables (5)** - AI Cognition & Outcomes
-| Table | Purpose | Key Relationships |
-|-------|---------|-------------------|
-| `ai_context` | Versioned cognitive state for AI participants (4-block system) | References `sim_runs.run_id`, `roles.role_id` |
-| `ai_prompts` | Centralized AI prompt management with versioning | References `users.id` (creator) |
-| `sim_run_prompts` | Per-simulation AI prompt overrides | References `sim_runs.run_id`, `ai_prompts.prompt_id` |
-| `king_decisions` | King's final decisions after election | References `sim_runs.run_id`, `roles.role_id` |
-| `reflections` | Participant reflections for learning assessment | References `sim_runs.run_id`, `phases.phase_id`, `roles.role_id` |
-
-#### **Supporting Tables (3)** - Infrastructure & Templates
-| Table | Purpose | Key Relationships |
-|-------|---------|-------------------|
-| `event_log` | Complete audit trail for all simulation events | References `sim_runs.run_id` |
-| `facilitator_actions` | Facilitator manual interventions and overrides | References `sim_runs.run_id`, `users.id` |
-| `simulation_templates` | Master simulation designs (reusable) | Standalone, referenced during setup |
-
-### 3.3 Entity Relationship Diagram
-
-```
-auth.users (Supabase Auth)
-    ↓
-users ──┐
-    ↓   │
-sim_runs ←──────────┐
-    ├───────────┐   │
-    ↓           ↓   │
-  clans       phases│
-    ├───────────┐   │
-    ↓           ↓   │
-  roles ←───────┘   │
-    ├───────────────┼─────┬─────┬──────┬───────┬─────────────┐
-    ↓               ↓     ↓     ↓      ↓       ↓             ↓
-meetings    vote_sessions │  king_decisions  reflections  ai_context
-    ↓                     │                                  ↓
-meeting_invitations       │                            ai_prompts
-                         ↓
-                      votes
-                         ↓
-                   vote_results
-
-simulation_templates (standalone, referenced during setup)
-event_log (references sim_runs, actors via UUID)
-facilitator_actions (references sim_runs, users)
-access_tokens (references users)
-public_speeches (references sim_runs, phases, roles)
-```
-
-### 3.4 Key Architectural Patterns
-
-#### **Immutability Pattern**
-```
-sim_runs.config (JSONB)
-    ↓
-Frozen once status = 'in_progress'
-    ↓
-Changes create NEW simulation (new run_id)
-    ↓
-config_checksum validates integrity (MD5 hash)
-```
-
-#### **Versioning Pattern**
-```
-ai_context table
-    ↓
-version INTEGER (1, 2, 3, ...)
-    ↓
-is_current BOOLEAN (only ONE true per role_id)
-    ↓
-Old versions preserved for analysis
-    ↓
-Trigger ensures single current version
-```
-
-#### **Event Sourcing Light**
-```
-Action (vote, meeting, speech)
-    ↓
-Database Write
-    ↓
-Trigger Function
-    ↓
-event_log INSERT
-    ↓
-Supabase Realtime
-    ↓
-All subscribed clients notified
-```
-
-### 3.5 JSONB Flexibility
-
-Several tables use JSONB for flexible data storage:
-
-| Table | JSONB Field | Purpose |
-|-------|-------------|---------|
-| `sim_runs` | `config` | Complete simulation configuration snapshot |
-| `roles` | `ai_config` | AI-specific settings (ElevenLabs agent_id, etc.) |
-| `meetings` | `participants` | Array of role_ids |
-| `vote_sessions` | `eligible_candidates` | Array of role_ids for choose_person votes |
-| `vote_results` | `results_data` | Flexible tally structure (winners, percentages, etc.) |
-| `ai_context` | `block_1_fixed`, `block_2_identity`, `block_3_memory`, `block_4_goals` | 4-block metacognitive system |
-| `king_decisions` | `taxes`, `budget_priorities`, `appointments`, `international_affairs` | King's decree structure |
-| `reflections` | `ai_insights` | Structured AI analysis |
-| `event_log` | `payload` | Event-specific data |
-| `facilitator_actions` | `action_details` | Old/new values and reason |
-
-**Benefits:**
-- Flexible schema evolution without migrations
-- Complex nested data structures
-- Fast queries with GIN indexes
-- Natural JSON API responses
-
-### 3.6 Row-Level Security (RLS) Model
-
-**Security Philosophy:** Role-based access control
-- **Facilitators** - Full access to their simulations
-- **Participants** - Access only to their simulation data
-- **Service Role** - Backend automation (AI, event logging)
-
-**Performance Optimization:**
-All RLS policies use optimized `auth.uid()` pattern:
 ```sql
--- ❌ SLOW: Per-row evaluation
-WHERE assigned_user_id = auth.uid()
+CREATE TABLE sim_runs (
+  -- Identity
+  run_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_name TEXT NOT NULL,
+  version TEXT NOT NULL, -- e.g., "KOURION_v1.0"
+  
+  -- Configuration Snapshot (immutable after start)
+  config JSONB NOT NULL, -- Complete configuration at launch time
+  config_checksum TEXT NOT NULL, -- MD5 of config for validation
+  
+  -- Participants
+  total_participants INTEGER NOT NULL,
+  human_participants INTEGER NOT NULL,
+  ai_participants INTEGER NOT NULL,
+  
+  -- Status
+  status TEXT NOT NULL CHECK (status IN (
+    'setup',          -- Being configured
+    'ready',          -- Locked, ready to launch
+    'in_progress',    -- Active simulation
+    'completed',      -- Finished
+    'cancelled'       -- Aborted
+  )),
+  
+  -- Timing (only created_at is required)
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  
+  -- Ownership
+  facilitator_id UUID REFERENCES users(id),
+  
+  -- Metadata (all optional)
+  notes TEXT,
+  learning_objectives TEXT[], -- Up to 3 objectives
 
--- ✅ FAST: Single evaluation (10-100x faster)
-WHERE assigned_user_id = (SELECT auth.uid())
+  -- Voting Configuration
+  vote_1_threshold INTEGER, -- Votes required for Vote 1 (NULL = use default 2/3 of total_participants)
+  vote_2_threshold INTEGER  -- Votes required for Vote 2 (NULL = use default 2/3 of total_participants)
+);
+
+CREATE INDEX idx_sim_runs_status ON sim_runs(status);
+CREATE INDEX idx_sim_runs_facilitator ON sim_runs(facilitator_id);
 ```
 
-**Helper Functions:**
+**Key Points:**
+- `config` JSONB contains entire simulation setup (clans, roles, timing, rules)
+- Immutable after `status = 'in_progress'`
+- `config_checksum` validates no unauthorized changes
+
+#### 3.2.2 `users` (Facilitators & Participants)
+
 ```sql
-is_facilitator() → BOOLEAN
-get_current_user_role_id(p_run_id UUID) → UUID
-is_participant_in_run(p_run_id UUID) → BOOLEAN
+CREATE TABLE users (
+  -- Identity (linked to Supabase Auth)
+  id UUID PRIMARY KEY REFERENCES auth.users(id),
+  email TEXT UNIQUE NOT NULL,
+  
+  -- Display Information
+  display_name TEXT NOT NULL, -- "Alex", "Maria" (used in UI)
+  full_name TEXT,             -- Optional full name
+  avatar_url TEXT,
+  
+  -- System Role (not simulation role)
+  role TEXT NOT NULL CHECK (role IN ('facilitator', 'participant')),
+  
+  -- Registration & Simulation Status
+  status TEXT NOT NULL DEFAULT 'registered' CHECK (status IN (
+    'registered',    -- User created account, waiting for role assignment
+    'role_assigned', -- Role assigned, waiting for simulation start
+    'active',        -- Currently in simulation
+    'completed',     -- Simulation finished
+    'inactive',      -- Account deactivated
+    'banned'         -- Access revoked
+  )),
+  
+  -- Event Management (for multi-event support)
+  current_event_code TEXT, -- The event they're registered for (e.g., "KING2025-CYPRUS")
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_login_at TIMESTAMPTZ,
+  
+  -- Preferences
+  preferences JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_status ON users(status);
+CREATE INDEX idx_users_event ON users(current_event_code);
 ```
 
-**Coverage:** 59 policies protecting all 20 tables
+**Key Points:**
+- **display_name** used in participant list and UI (first name or nickname)
+- **status** tracks progression: registered â†’ role_assigned â†’ active â†’ completed
+- **current_event_code** allows same user to register for multiple events over time
+- Email is real participant email (for password reset, communications)
 
-### 3.7 Performance Optimizations
+#### 3.2.2b `access_tokens` (QR Code Device Access)
 
-**Migration History:**
-1. **Migration 00021 (Oct 27):** RLS performance optimization
-   - Wrapped all `auth.uid()` in SELECT subqueries
-   - 10-100x faster policy evaluation
-   - Profile loading: 5s timeout → <100ms
+```sql
+CREATE TABLE access_tokens (
+  -- Identity
+  token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  
+  -- Token
+  token TEXT NOT NULL UNIQUE, -- Secure random token (32+ chars)
+  device_name TEXT,            -- Optional: "Phone", "Tablet", "Laptop"
+  
+  -- Validity
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL, -- Usually 24 hours from creation
+  used_at TIMESTAMPTZ,              -- NULL until used
+  used_from_ip TEXT,                -- IP address where token was used (audit)
+  
+  -- Status
+  is_valid BOOLEAN DEFAULT TRUE,    -- Can be revoked by facilitator
+  revoked_by UUID REFERENCES users(id), -- Facilitator who revoked it
+  revoked_at TIMESTAMPTZ,
+  
+  -- Constraints
+  CHECK (expires_at > created_at)
+);
 
-2. **Migration 00027 (Oct 28):** Simulation loading indexes
-   - Added composite indexes for common query patterns
-   - 5-6x speedup for dashboard loading
-   - Simulation load: 2-3s → <500ms
+CREATE INDEX idx_tokens_user ON access_tokens(user_id);
+CREATE INDEX idx_tokens_token ON access_tokens(token) WHERE is_valid = TRUE AND used_at IS NULL;
+CREATE INDEX idx_tokens_expiry ON access_tokens(expires_at) WHERE is_valid = TRUE;
+```
 
-3. **Migration 00043 (Oct 28):** Final auth.uid() cleanup
-   - Resolved all Performance Advisor warnings
-   - Consistent performance across all tables
+**Key Points:**
+- **Single-use tokens** for secure device switching
+- **24-hour expiry** (configurable)
+- **Audit trail** (when used, from what IP)
+- **Facilitator can revoke** tokens if needed
 
-**Current Performance:**
-- Sub-100ms query times for common operations
-- Real-time updates with <100ms latency
-- Supports 30+ concurrent participants
+#### 3.2.3 `clans` (Faction Definitions)
 
-### 3.8 Data Implementation Summary
+```sql
+CREATE TABLE clans (
+  -- Identity
+  clan_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  
+  -- Definition (only name required)
+  name TEXT NOT NULL,
+  sequence_number INTEGER NOT NULL, -- Display order
+  
+  -- Description (from seed data, but can be NULL if minimal setup)
+  about TEXT,
+  key_priorities TEXT,
+  attitude_to_others TEXT,
+  if_things_go_wrong TEXT, -- Clan's emergency action
+  
+  -- Visual (all optional)
+  emblem_url TEXT, -- Uploaded image or generated
+  color_hex TEXT DEFAULT '#476078',
+  
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(run_id, name),
+  UNIQUE(run_id, sequence_number)
+);
 
-| Metric | Value |
-|--------|-------|
-| **Total Tables** | 20 |
-| **RLS Policies** | 59 |
-| **Database Functions** | 15+ |
-| **Triggers** | 9 |
-| **Performance Indexes** | 80+ (including composite, partial, GIN) |
-| **Migration Files** | 46 (~10,000 lines SQL) |
-| **Query Performance** | Sub-100ms for common operations |
+CREATE INDEX idx_clans_run ON clans(run_id);
+```
 
-**📚 For Complete Details:**
-- **Full DDL:** See [KING_DATA_ARCHITECTURE.md](./KING_DATA_ARCHITECTURE.md) Section 1
-- **All RLS Policies:** See [KING_DATA_ARCHITECTURE.md](./KING_DATA_ARCHITECTURE.md) Section 2
-- **Database Functions:** See [KING_DATA_ARCHITECTURE.md](./KING_DATA_ARCHITECTURE.md) Section 3
-- **JSONB Query Patterns:** See [KING_DATA_ARCHITECTURE.md](./KING_DATA_ARCHITECTURE.md) Section 5
-- **Performance History:** See [KING_DATA_ARCHITECTURE.md](./KING_DATA_ARCHITECTURE.md) Section 6
+#### 3.2.4 `roles` (Individual Character Definitions)
 
+```sql
+CREATE TABLE roles (
+  -- Identity
+  role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  clan_id UUID NOT NULL REFERENCES clans(clan_id) ON DELETE CASCADE,
+  
+  -- Assignment
+  participant_type TEXT NOT NULL CHECK (participant_type IN ('human', 'ai')),
+  assigned_user_id UUID REFERENCES users(id), -- NULL if AI or unassigned
+  
+  -- Character Definition (only name required, rest optional)
+  name TEXT NOT NULL,
+  age INTEGER,
+  position TEXT,
+  background TEXT,
+  character_traits TEXT,
+  interests TEXT,
+  
+  -- AI-Specific Config (NULL for humans)
+  ai_config JSONB, 
+  -- SIMPLIFIED: Only stores { "elevenlabs_agent_id": "agent_abc123" }
+  -- Voice settings, LLM model, voice_id are all pre-configured in the ElevenLabs agent
+  -- Facilitator just picks from a dropdown of pre-created agents (e.g., "Male Voice 1", "Female Voice 2")
+  
+  -- Visual (optional)
+  avatar_url TEXT,
+  
+  -- Status
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(run_id, name)
+);
+
+CREATE INDEX idx_roles_run ON roles(run_id);
+CREATE INDEX idx_roles_clan ON roles(clan_id);
+CREATE INDEX idx_roles_user ON roles(assigned_user_id);
+CREATE INDEX idx_roles_type ON roles(participant_type);
+```
+
+#### 3.2.5 `phases` (Stage Definitions)
+
+```sql
+CREATE TABLE phases (
+  -- Identity
+  phase_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  
+  -- Definition (from KING_Process.csv)
+  sequence_number INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT, -- Optional description
+  default_duration_minutes INTEGER NOT NULL,
+  
+  -- Actual Execution (all optional until phase runs)
+  actual_duration_minutes INTEGER, -- May differ from default
+  started_at TIMESTAMPTZ,
+  ended_at TIMESTAMPTZ,
+  
+  -- Status
+  status TEXT DEFAULT 'pending' CHECK (status IN (
+    'pending',      -- Not yet started
+    'active',       -- Currently running
+    'paused',       -- Temporarily stopped
+    'completed',    -- Finished
+    'skipped'       -- Facilitator skipped
+  )),
+  
+  UNIQUE(run_id, sequence_number)
+);
+
+CREATE INDEX idx_phases_run ON phases(run_id);
+CREATE INDEX idx_phases_status ON phases(run_id, status);
+```
+
+**Key Points:**
+- Phases pre-populated from `KING_Process.csv` when run created
+- `actual_duration_minutes` tracks facilitator adjustments
+
+#### 3.2.6 `meetings` (All Conversations)
+
+**Purpose:** Track meetings for AI context updates. Physical human-only meetings are NOT tracked.
+
+```sql
+CREATE TABLE meetings (
+  -- Identity
+  meeting_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  phase_id UUID NOT NULL REFERENCES phases(phase_id),
+  
+  -- Type (SIMPLIFIED - only 2 types)
+  meeting_type TEXT NOT NULL CHECK (meeting_type IN (
+    'clan_council',        -- Automatic clan meeting (all clan members)
+    'free_consultation'    -- Ad-hoc meeting during free consult stage (2+ participants)
+  )),
+  
+  -- Organization
+  organizer_role_id UUID REFERENCES roles(role_id), -- NULL for automatic clan councils
+  title TEXT, -- Optional (e.g., "Discuss Alliance with Merchants")
+  
+  -- Participants (JSONB array of role_ids)
+  participants JSONB NOT NULL DEFAULT '[]'::jsonb,
+  -- Example: ["role-uuid-1", "role-uuid-2", "role-uuid-3"]
+  -- Can be 2+ participants
+  
+  -- Modality (SIMPLIFIED - only voice or text)
+  modality TEXT NOT NULL DEFAULT 'voice' CHECK (modality IN (
+    'voice',      -- Voice call via ElevenLabs (default, if any AI + human)
+    'text'        -- Text chat (fallback if voice fails, or AI-to-AI only)
+  )),
+  
+  -- Content (transcript required for AI updates)
+  transcript TEXT, -- NULL while in progress, populated on end
+  transcript_format TEXT DEFAULT 'plain', -- 'plain' or 'json' (structured messages)
+  
+  -- Voice Integration (only if modality = 'voice')
+  elevenlabs_conversation_id TEXT, -- If voice meeting
+  
+  -- Timing (all optional except created_at)
+  scheduled_duration_minutes INTEGER, -- Suggested duration
+  started_at TIMESTAMPTZ,
+  ended_at TIMESTAMPTZ,
+  actual_duration_seconds INTEGER, -- Calculated on end
+  
+  -- Status
+  status TEXT DEFAULT 'pending' CHECK (status IN (
+    'pending',      -- Invite sent, not all accepted yet
+    'accepted',     -- All participants accepted
+    'active',       -- Meeting in progress
+    'completed',    -- Finished normally
+    'cancelled',    -- Organizer cancelled
+    'expired'       -- Invite expired (no response)
+  )),
+  
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_meetings_run ON meetings(run_id);
+CREATE INDEX idx_meetings_phase ON meetings(phase_id);
+CREATE INDEX idx_meetings_status ON meetings(status);
+CREATE INDEX idx_meetings_organizer ON meetings(organizer_role_id);
+-- GIN index for participant array queries
+CREATE INDEX idx_meetings_participants ON meetings USING GIN (participants);
+```
+
+**Key Points:**
+- **Only 2 types:** `clan_council` (automatic) and `free_consultation` (ad-hoc)
+- **Physical meetings NOT tracked** - humans meet naturally, no app involvement
+- **Participants array:** Flexible 2+ participants (no limit, though 2-6 is typical)
+- **Modality:** Voice (default) or Text (fallback/AI-only)
+- **Transcript essential:** Needed for AI context updates after meeting ends
+- **Purpose:** Primarily to inform AI characters what was discussed, who promised what
+- **No separate DM system:** All text/voice conversations happen via meetings for simpler architecture. After each meeting, the entire transcript is sent to AI participants for context update.
+
+**Meeting Flow:**
+1. Clan Council: System auto-creates with all clan members
+2. Free Consultation: Participant initiates, invites 1+ others
+3. If any AI involved: Meeting tracked in app
+4. If all human: They can use app OR just meet physically (untracked)
+5. On end: Transcript sent to all AI participants for context update
+
+#### 3.2.7 `meeting_invitations` (Invitation Workflow)
+
+```sql
+CREATE TABLE meeting_invitations (
+  -- Identity
+  invitation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  meeting_id UUID NOT NULL REFERENCES meetings(meeting_id) ON DELETE CASCADE,
+  
+  -- Target
+  invitee_role_id UUID NOT NULL REFERENCES roles(role_id),
+  
+  -- Response
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN (
+    'pending',
+    'accepted',
+    'declined',
+    'expired'
+  )),
+  response_text TEXT, -- Optional message from invitee
+  responded_at TIMESTAMPTZ,
+  
+  -- Timing
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ, -- Auto-expire after 10 minutes
+  
+  UNIQUE(meeting_id, invitee_role_id)
+);
+
+CREATE INDEX idx_invitations_meeting ON meeting_invitations(meeting_id);
+CREATE INDEX idx_invitations_invitee ON meeting_invitations(invitee_role_id);
+CREATE INDEX idx_invitations_status ON meeting_invitations(status);
+```
+
+**Key Point:** Once ANY invitee accepts, the meeting transitions to `accepted` status and can begin. The meeting doesn't wait for all invitees to respond. Additional participants can join later if they accept their invitations.
+
+#### 3.2.8 `public_speeches` (Recording Public Addresses)
+
+**Purpose:** Record all public speeches (human, AI, or facilitator) so transcripts can be distributed to AI participants for context updates. This is NOT live broadcasting - it's recording, transcription, and distribution.
+
+**Recording Methods:**
+
+1. **Human Speeches:** Via dedicated "Secretary" workstation
+   - Dedicated computer with quality microphone
+   - ElevenLabs API for automatic transcription
+   - Simple on/off control by facilitator or assistant
+   - Records â†’ Transcribes â†’ Saves â†’ Distributes to AIs
+   - See: KING_Secretary_Recording_System_Complete.md for full specs
+
+2. **AI Speeches:** Programmatically generated
+   - AI generates speech text
+   - Optionally converted to audio via TTS
+   - Transcript distributed to all other AIs
+
+3. **Facilitator Announcements:** Via Secretary workstation or manual entry
+
+```sql
+CREATE TABLE public_speeches (
+  -- Identity
+  speech_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  phase_id UUID NOT NULL REFERENCES phases(phase_id),
+  
+  -- Speaker (one of these will be set)
+  speaker_role_id UUID REFERENCES roles(role_id), -- NULL for facilitator
+  is_facilitator BOOLEAN DEFAULT FALSE,
+  is_ai_speaker BOOLEAN DEFAULT FALSE, -- TRUE if AI character speaking
+  
+  -- Content (transcript is REQUIRED for AI distribution)
+  transcript TEXT NOT NULL, -- Required: sent to all AI participants
+  audio_url TEXT, -- Optional (stored if recorded/generated)
+  
+  -- Delivery Method (for reference only)
+  delivery_method TEXT CHECK (delivery_method IN (
+    'human_microphone',    -- Human spoke into physical mic (via Secretary)
+    'ai_tts_playback',     -- AI speech played through facilitator's speakers
+    'facilitator_announcement' -- Facilitator's own announcement
+  )),
+  
+  -- Timing (all optional except created_at)
+  started_at TIMESTAMPTZ,
+  ended_at TIMESTAMPTZ,
+  duration_seconds INTEGER,
+  
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_speeches_run ON public_speeches(run_id);
+CREATE INDEX idx_speeches_phase ON public_speeches(phase_id);
+CREATE INDEX idx_speeches_speaker ON public_speeches(speaker_role_id);
+```
+
+**Key Points:**
+- **Purpose:** Record â†’ Transcribe â†’ Distribute to all AI participants
+- **NOT live broadcasting:** Recording happens, then transcript sent to AIs for context update
+- **Who speaks publicly:**
+  - Candidate speeches (human or AI during election phases)
+  - King's final decree
+  - Ad-hoc public addresses to entire assembly
+  - Facilitator announcements
+- **Flow:** Speech recorded (via Secretary workstation) â†’ Transcript created (ElevenLabs) â†’ Event emitted â†’ All AIs receive transcript â†’ AIs update their contexts
+- Transcript is canonical and required; audio is optional
+- **Secretary System:** Dedicated computer + microphone + ElevenLabs API = automatic transcription in ~30 seconds
+
+#### 3.2.9 `vote_sessions` (Voting Configurations)
+
+```sql
+CREATE TABLE vote_sessions (
+  -- Identity
+  session_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  phase_id UUID NOT NULL REFERENCES phases(phase_id),
+  
+  -- Type & Structure
+  vote_type TEXT NOT NULL CHECK (vote_type IN (
+    'clan_nomination',      -- Clan selects 1 person to nominate (choose from clan members)
+    'election_round',       -- All vote for King (choose from candidates)
+    'clan_oath',            -- Oath of allegiance (yes/no/abstain)
+    'clan_action',          -- Action against King (yes/no/abstain)
+    'facilitator_proposal'  -- Ad-hoc proposal created by facilitator (yes/no/abstain)
+  )),
+  
+  -- Format
+  vote_format TEXT NOT NULL CHECK (vote_format IN (
+    'choose_person',  -- Select one role_id (clan_nomination, election_round)
+    'yes_no'          -- Binary choice (oath, action, facilitator_proposal)
+  )),
+  
+  -- Scope (who can vote)
+  scope TEXT NOT NULL DEFAULT 'all' CHECK (scope IN (
+    'all',          -- Everyone votes (elections)
+    'clan_only'     -- Only specific clan votes (nominations, oath, action)
+  )),
+  scope_clan_id UUID REFERENCES clans(clan_id), -- Required if scope='clan_only'
+  
+  -- Options (for choose_person votes)
+  eligible_candidates JSONB, -- Array of role_ids that can be chosen
+  -- Example: ["role-uuid-1", "role-uuid-2", "role-uuid-3"]
+  
+  -- Proposal Details (for facilitator_proposal)
+  proposal_title TEXT, -- "Should we extend the consultation phase?"
+  proposal_description TEXT, -- Full explanation
+  
+  -- Transparency & Results Reveal (NEW)
+  transparency_level TEXT DEFAULT 'open' CHECK (transparency_level IN (
+    'open',      -- Show individual votes (who voted for whom)
+    'anonymous', -- Show only tallies (vote counts and percentages)
+    'secret'     -- Results hidden until facilitator announces
+  )),
+  
+  reveal_timing TEXT DEFAULT 'after_all_votes' CHECK (reveal_timing IN (
+    'immediate',        -- Results shown as votes come in
+    'after_all_votes',  -- Results shown after all votes cast (default)
+    'facilitator_manual' -- Facilitator controls when to reveal
+  )),
+  
+  -- Animation Settings (for dramatic vote counting)
+  animation_speed TEXT DEFAULT 'normal' CHECK (animation_speed IN (
+    'slow',    -- 1.2 seconds per ballot
+    'normal',  -- 0.8 seconds per ballot (default)
+    'fast',    -- 0.4 seconds per ballot
+    'instant'  -- No animation, show results immediately
+  )),
+  allow_skip_animation BOOLEAN DEFAULT FALSE, -- Let participants skip animation
+  
+  -- Status
+  status TEXT DEFAULT 'open' CHECK (status IN (
+    'open',       -- Currently accepting votes
+    'closed',     -- Voting ended
+    'announced'   -- Results announced to participants
+  )),
+  
+  -- Timing
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  closed_at TIMESTAMPTZ,
+  announced_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_vote_sessions_run ON vote_sessions(run_id);
+CREATE INDEX idx_vote_sessions_phase ON vote_sessions(phase_id);
+CREATE INDEX idx_vote_sessions_status ON vote_sessions(status);
+CREATE INDEX idx_vote_sessions_clan ON vote_sessions(scope_clan_id) WHERE scope = 'clan_only';
+```
+
+**Key Points:**
+- **vote_sessions** defines WHAT is being voted on
+- Supports both "choose person" and "yes/no" formats
+- Facilitator can create ad-hoc proposals during simulation
+- Clear scope (all participants vs. specific clan)
+- **NEW:** Transparency control (open/anonymous/secret)
+- **NEW:** Reveal timing (immediate/after all votes/manual)
+- **NEW:** Animation settings for dramatic vote counting
+
+#### 3.2.10a `vote_results` (Calculated Results)
+
+```sql
+CREATE TABLE vote_results (
+  -- Identity
+  result_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID NOT NULL REFERENCES vote_sessions(session_id) ON DELETE CASCADE,
+  
+  -- Results Data
+  results_data JSONB NOT NULL,
+  -- Format for 'choose_person' votes:
+  -- {
+  --   "winner": {"role_id": "...", "name": "Marcus", "vote_count": 6, "percentage": 40},
+  --   "all_candidates": [
+  --     {"role_id": "...", "name": "Marcus", "vote_count": 6, "percentage": 40},
+  --     {"role_id": "...", "name": "Dimitri", "vote_count": 5, "percentage": 33},
+  --     {"role_id": "...", "name": "Sofia", "vote_count": 4, "percentage": 27}
+  --   ],
+  --   "total_votes": 15,
+  --   "tie": false
+  -- }
+  
+  -- Format for 'yes_no' votes:
+  -- {
+  --   "yes": 8, "no": 5, "abstain": 2,
+  --   "total": 15,
+  --   "yes_percentage": 53.3,
+  --   "no_percentage": 33.3,
+  --   "abstain_percentage": 13.3,
+  --   "passed": true  // If threshold met (if applicable)
+  -- }
+  
+  -- Timeline
+  calculated_at TIMESTAMPTZ DEFAULT NOW(),
+  announced_at TIMESTAMPTZ, -- When results were revealed to participants
+  
+  -- Animation
+  animation_shown BOOLEAN DEFAULT TRUE,
+  animation_duration_seconds INTEGER, -- Actual time animation took
+  
+  -- Audit
+  calculated_by UUID REFERENCES users(id), -- Facilitator who triggered calculation
+  
+  -- Constraint
+  UNIQUE(session_id) -- One result record per session
+);
+
+CREATE INDEX idx_vote_results_session ON vote_results(session_id);
+CREATE INDEX idx_vote_results_calculated ON vote_results(calculated_at);
+```
+
+**Key Points:**
+- **vote_results** stores calculated tallies and winner
+- Separate from individual votes (in `votes` table)
+- JSONB format allows flexible data structure
+- Tracks when results calculated vs. when announced
+- Records animation metadata
+
+#### 3.2.10 `votes` (Individual Vote Records)
+
+```sql
+CREATE TABLE votes (
+  -- Identity
+  vote_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID NOT NULL REFERENCES vote_sessions(session_id) ON DELETE CASCADE,
+  
+  -- Voter
+  voter_role_id UUID NOT NULL REFERENCES roles(role_id),
+  voter_clan_id UUID NOT NULL REFERENCES clans(clan_id),
+  
+  -- Choice (one of these will be set based on vote_format)
+  
+  -- For 'choose_person' format:
+  chosen_role_id UUID REFERENCES roles(role_id), -- The person they voted for
+  
+  -- For 'yes_no' format:
+  yes_no_choice TEXT CHECK (yes_no_choice IN ('yes', 'no', 'abstain')),
+  
+  -- Timing
+  cast_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Validation (one vote per session per voter)
+  UNIQUE(session_id, voter_role_id)
+);
+
+CREATE INDEX idx_votes_session ON votes(session_id);
+CREATE INDEX idx_votes_voter ON votes(voter_role_id);
+CREATE INDEX idx_votes_chosen ON votes(chosen_role_id);
+CREATE INDEX idx_votes_choice ON votes(yes_no_choice);
+```
+
+**Key Points:**
+- **votes** stores individual vote records
+- Flexible: supports both person selection and yes/no voting
+- UNIQUE constraint: one vote per participant per session
+- Simple to query: "show me all votes for this session"
+
+**Vote Type Examples:**
+
+| Vote Type | Format | Scope | Example |
+|-----------|--------|-------|---------|
+| **Clan Nomination** | choose_person | clan_only | Agriculture clan selects who to nominate for King |
+| **Election Round 1** | choose_person | all | Everyone votes for their preferred candidate |
+| **Clan Oath** | yes_no | clan_only | "Do you swear allegiance to the King?" |
+| **Clan Action** | yes_no | clan_only | "Do you support action against the King?" |
+| **Facilitator Proposal** | yes_no | all or clan_only | "Should we extend the consultation phase by 10 minutes?" |
+
+#### 3.2.11 `king_decisions` (Royal Decrees)
+
+```sql
+CREATE TABLE king_decisions (
+  -- Identity
+  decision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  
+  -- King
+  king_role_id UUID NOT NULL REFERENCES roles(role_id),
+  
+  -- Decisions (from KING_Decisions.md structure)
+  taxes JSONB NOT NULL, 
+  -- { agriculture: 'lower'|'same'|'higher', trade: ..., banking: ..., craft: ... }
+  
+  budget_priorities JSONB NOT NULL,
+  -- { priority_1: 'defense'|'culture'|..., priority_2: ..., priority_3: ... }
+  
+  appointments JSONB NOT NULL,
+  -- { economic_advisor: role_id, senior_judge: role_id }
+  
+  international_affairs JSONB NOT NULL,
+  -- { alliance: 'Salamis'|'Kition'|'none', war_declarations: [...] }
+  
+  other_decisions TEXT, -- Free text for custom decisions
+  
+  -- Final Speech
+  final_speech_transcript TEXT,
+  
+  -- Timing
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Validation (one decree per run)
+  UNIQUE(run_id)
+);
+
+CREATE INDEX idx_king_decisions_run ON king_decisions(run_id);
+CREATE INDEX idx_king_decisions_king ON king_decisions(king_role_id);
+```
+
+#### 3.2.12 `reflections` (Individual Reflections)
+
+```sql
+CREATE TABLE reflections (
+  -- Identity
+  reflection_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  phase_id UUID REFERENCES phases(phase_id), -- NULL for post-run reflection
+  
+  -- Author
+  role_id UUID NOT NULL REFERENCES roles(role_id),
+  
+  -- Type
+  reflection_type TEXT NOT NULL CHECK (reflection_type IN (
+    'personal',      -- Individual reflection
+    'group',         -- Clan/group reflection
+    'ai_generated'   -- AI-assisted reflection
+  )),
+  
+  -- Content (text required, AI fields optional)
+  reflection_text TEXT NOT NULL,
+  
+  -- AI Assistance (all optional)
+  ai_summary TEXT, -- If AI processed this reflection
+  ai_insights JSONB, -- Structured insights
+  
+  -- Timing
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_reflections_run ON reflections(run_id);
+CREATE INDEX idx_reflections_role ON reflections(role_id);
+CREATE INDEX idx_reflections_phase ON reflections(phase_id);
+```
+
+#### 3.2.13 `ai_context` (AI Participant Cognitive State)
+
+```sql
+CREATE TABLE ai_context (
+  -- Identity
+  context_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  role_id UUID NOT NULL REFERENCES roles(role_id),
+  
+  -- Version Control
+  version INTEGER NOT NULL DEFAULT 1,
+  is_current BOOLEAN DEFAULT TRUE,
+  
+  -- The Four Blocks (as per KING_AI_DESIGN.md)
+  
+  -- Block 1: FIXED CONTEXT (set once, immutable)
+  block_1_fixed JSONB NOT NULL,
+  -- { world_rules, stages, structure, possible_actions, architecture }
+  
+  -- Block 2: IDENTITY (stable but can evolve)
+  block_2_identity JSONB NOT NULL,
+  -- { age, clan, role, backstory, values, personality, ... }
+  
+  -- Block 3: MEMORY (compacted, bounded)
+  block_3_memory JSONB NOT NULL,
+  -- { events: [...], relationships: {...}, obligations: [...], conflicts: [...] }
+  
+  -- Block 4: GOALS & PLANS (evolves frequently)
+  block_4_goals JSONB NOT NULL,
+  -- { goals: [...], hypotheses: [...], strategies: [...], priorities: [...] }
+  
+  -- Metadata
+  updated_trigger TEXT, -- What caused this update (e.g., "speech_42", "meeting_15")
+  updated_reason TEXT, -- AI's explanation for changes
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Validation
+  CHECK (
+    (is_current = TRUE AND version = (
+      SELECT MAX(version) 
+      FROM ai_context ac2 
+      WHERE ac2.role_id = ai_context.role_id
+    ))
+    OR is_current = FALSE
+  )
+);
+
+CREATE INDEX idx_ai_context_role ON ai_context(role_id);
+CREATE INDEX idx_ai_context_current ON ai_context(role_id, is_current) 
+  WHERE is_current = TRUE;
+CREATE INDEX idx_ai_context_version ON ai_context(role_id, version);
+```
+
+**Key Points:**
+- Complete cognitive state in 4 JSONB blocks
+- Versioned: old states preserved for analysis
+- Only ONE `is_current = TRUE` per role
+- `updated_trigger` traces what event caused update
+
+#### 3.2.14 `event_log` (Audit Trail)
+
+```sql
+CREATE TABLE ai_prompts (
+  -- Identity
+  prompt_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Prompt Classification
+  prompt_type TEXT NOT NULL CHECK (prompt_type IN (
+    'block_1_fixed',           -- Block 1: FIXED CONTEXT system prompt
+    'block_2_identity_update', -- Block 2: IDENTITY reflection prompt
+    'block_3_memory_update',   -- Block 3: MEMORY reflection prompt
+    'block_4_goals_update',    -- Block 4: GOALS & PLANS reflection prompt
+    'action_decision',         -- Prompts for specific actions (vote, invite, etc.)
+    'public_speech',           -- Prompt for generating public speeches
+    'personal_feedback',       -- Prompt for generating personal feedback after simulation
+    'debrief_analysis',        -- Prompt for analyzing simulation data for debrief
+    'induction_assistant'      -- Prompt for AI induction assistant (Zenon)
+  )),
+  
+  -- Versioning
+  version TEXT NOT NULL DEFAULT 'v1.0',
+  is_active BOOLEAN DEFAULT FALSE, -- Only ONE active prompt per type
+  
+  -- Prompt Content
+  system_prompt TEXT NOT NULL, 
+  -- The actual system prompt/instruction sent to LLM
+  
+  user_prompt_template TEXT,
+  -- Optional template for user message (with {{variables}})
+  -- Example: "NEW INFORMATION:\n{{new_context}}\n\nYOUR CURRENT STATE:\nIdentity: {{block_2}}\nMemory: {{block_3}}\nGoals: {{block_4}}\n\nUpdate your cognitive state."
+  
+  -- LLM Configuration
+  default_llm_model TEXT DEFAULT 'claude-3-5-sonnet-20241022',
+  -- Suggested model, but can be overridden per sim_run
+  
+  default_temperature DECIMAL(3,2) DEFAULT 0.7,
+  default_max_tokens INTEGER DEFAULT 4096,
+  
+  -- Metadata & Documentation
+  name TEXT NOT NULL, -- Human-readable name: "Block 2 Identity Update v1.0"
+  description TEXT,   -- What this prompt does
+  usage_notes TEXT,   -- When/how to use this prompt
+  
+  -- Authorship & Timing
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Validation: Only one active prompt per type
+  UNIQUE(prompt_type, version)
+);
+
+CREATE INDEX idx_ai_prompts_type ON ai_prompts(prompt_type);
+CREATE INDEX idx_ai_prompts_active ON ai_prompts(prompt_type, is_active) 
+  WHERE is_active = TRUE;
+
+-- Ensure only ONE active prompt per type
+CREATE UNIQUE INDEX idx_ai_prompts_active_unique 
+  ON ai_prompts(prompt_type) 
+  WHERE is_active = TRUE;
+```
+
+**Key Points:**
+- **Centralized prompt management**: All AI prompts in one place
+- **Versioning**: Multiple versions of each prompt, only one active
+- **Facilitator can customize**: Review and change prompts in Configurator UI
+- **Per-run override**: `sim_runs.config` can override default prompts
+- **Template variables**: User prompts support {{variables}} for dynamic content
+
+**Prompt Types Explained:**
+
+| Prompt Type | Purpose | When Used | Input Variables |
+|-------------|---------|-----------|----------------|
+| `block_1_fixed` | System prompt explaining AI architecture, world rules, possible actions | Once at AI initialization | role definition, world context, stages |
+| `block_2_identity_update` | Guides AI to update identity after dramatic events | After each new context (speech, meeting, vote) | current identity, new information |
+| `block_3_memory_update` | Guides AI to compress and update memory | After each new context | current memory, new information |
+| `block_4_goals_update` | Guides AI to revise goals and plans | After each new context | current goals, new information |
+| `action_decision` | Prompt for AI to make specific decisions (vote, invite, etc.) | When action is required | action type, available options, AI's current context blocks |
+| `public_speech` | Guides AI to generate speech content | When AI needs to make public speech | speech context, time limit, current goals |
+| `personal_feedback` | Generates personalized learning feedback | End of simulation | participant's actions, reflections, learning objectives |
+| `debrief_analysis` | Analyzes simulation data for group debrief | Debrief phase | all simulation data, coalition patterns, key decisions |
+| `induction_assistant` | Zenon AI assistant personality | Induction phase, reflection dialogues | participant's questions, role, learning objectives |
+
+#### 3.2.15 `sim_run_prompts` (Prompt Overrides per Simulation)
+
+```sql
+CREATE TABLE sim_run_prompts (
+  -- Identity
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  prompt_type TEXT NOT NULL,
+  
+  -- Override Configuration
+  custom_prompt_id UUID REFERENCES ai_prompts(prompt_id), -- If using custom prompt
+  llm_model_override TEXT, -- Override default model for this simulation
+  temperature_override DECIMAL(3,2),
+  max_tokens_override INTEGER,
+  
+  -- Metadata
+  notes TEXT, -- Why this override was made
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(run_id, prompt_type)
+);
+
+CREATE INDEX idx_sim_run_prompts_run ON sim_run_prompts(run_id);
+```
+
+**Usage Pattern:**
+```typescript
+// Facilitator customizes AI prompts for specific simulation
+await supabase.from('sim_run_prompts').insert({
+  run_id: 'sim_123',
+  prompt_type: 'block_3_memory_update',
+  custom_prompt_id: 'prompt_456', // Using experimental memory prompt
+  llm_model_override: 'claude-opus-4.1', // Better model for this critical prompt
+  notes: 'Testing more aggressive memory compression'
+});
+
+// System retrieves prompt for AI context update
+const activePrompt = await getPromptForRun('sim_123', 'block_3_memory_update');
+// Returns custom_prompt_id if set, otherwise falls back to default active prompt
+```
+
+#### 3.2.16 `event_log` (Audit Trail)
+
+```sql
+CREATE TABLE event_log (
+  -- Identity
+  event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  
+  -- Event Classification
+  event_type TEXT NOT NULL, -- e.g., 'phase_start', 'vote_cast', 'meeting_invite'
+  module TEXT NOT NULL, -- e.g., 'stage_engine', 'voting', 'meetings'
+  
+  -- Actor
+  actor_type TEXT NOT NULL CHECK (actor_type IN (
+    'facilitator', 'human_participant', 'ai_participant', 'system'
+  )),
+  actor_id UUID, -- role_id or user_id, NULL for system events
+  
+  -- Target (optional)
+  target_type TEXT, -- e.g., 'phase', 'meeting', 'vote'
+  target_id UUID,
+  
+  -- Payload
+  payload JSONB NOT NULL, -- Event-specific data
+  
+  -- Timestamp
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_event_log_run ON event_log(run_id);
+CREATE INDEX idx_event_log_type ON event_log(event_type);
+CREATE INDEX idx_event_log_actor ON event_log(actor_id);
+CREATE INDEX idx_event_log_created ON event_log(created_at);
+```
+
+**Key Points:**
+- Captures EVERYTHING that happens in simulation
+- Used for replay, debugging, analytics
+- Partitioned by `created_at` for performance (future)
+
+#### 3.2.15 `facilitator_actions` (Manual Overrides)
+
+```sql
+CREATE TABLE facilitator_actions (
+  -- Identity
+  action_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES sim_runs(run_id) ON DELETE CASCADE,
+  
+  -- Facilitator
+  facilitator_id UUID NOT NULL REFERENCES users(id),
+  
+  -- Action
+  action_type TEXT NOT NULL, -- e.g., 'extend_phase', 'override_vote', 'mute_ai'
+  target_type TEXT NOT NULL, -- e.g., 'phase', 'vote', 'role'
+  target_id UUID NOT NULL,
+  
+  -- Details
+  action_details JSONB NOT NULL, -- Old value, new value, reason
+  
+  -- Timing
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_facilitator_actions_run ON facilitator_actions(run_id);
+CREATE INDEX idx_facilitator_actions_facilitator ON facilitator_actions(facilitator_id);
+```
+
+---
+
+### 3.3 Supporting Tables
+
+#### 3.3.1 `simulation_templates` (Canonical Seed Data Storage)
+
+**Purpose:** Stores the master "theatre play" designs that can be instantiated into specific simulation runs.
+
+**Philosophy:**
+- **Canonical Design** = "The written play" (reusable, versioned)
+- **SIM Instance** = "Director's production" (customized, immutable once started)
+
+```sql
+CREATE TABLE simulation_templates (
+  -- Identity
+  template_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL DEFAULT 'The New King of Kourion',
+  version TEXT NOT NULL DEFAULT 'v1.0',
+  language TEXT NOT NULL DEFAULT 'ENG' CHECK (language IN ('ENG', 'RU')),
+  
+  -- Canonical Design (parsed from seed files)
+  context_text TEXT NOT NULL, 
+  -- Full text from KING_Context.md (world setting, general interests)
+  
+  process_stages JSONB NOT NULL,
+  -- Parsed from KING_Process.csv
+  -- [
+  --   { sequence: 1, name: "Clan Councils 1", description: "...", default_duration_minutes: 10 },
+  --   { sequence: 2, name: "Free Consultations 1", description: "...", default_duration_minutes: 15 },
+  --   ...
+  -- ]
+  
+  decisions_framework JSONB NOT NULL,
+  -- Parsed from KING_Decisions.md
+  -- {
+  --   taxes: { options: ["lower", "same", "higher"], categories: ["agriculture", "trade", ...] },
+  --   budget_priorities: { options: ["defense", "culture", "agriculture", ...] },
+  --   appointments: { positions: ["economic_advisor", "senior_judge"] },
+  --   international_affairs: { alliances: ["Salamis", "Kition", "none"], wars: [...] }
+  -- }
+  
+  canonical_clans JSONB NOT NULL,
+  -- Parsed from KING_ALL_CLANs.csv
+  -- [
+  --   {
+  --     name: "Artificers",
+  --     about: "Our clan represents...",
+  --     key_priorities: "The best King must...",
+  --     attitude_to_others: "We respect the Military...",
+  --     if_things_go_wrong: "If the King fails..."
+  --   },
+  --   { name: "Bankers", ... },
+  --   ...
+  -- ]
+  
+  canonical_roles JSONB NOT NULL,
+  -- Parsed from KING_ALL_ROLES.csv (up to 30 roles)
+  -- [
+  --   {
+  --     sequence: 1,
+  --     name: "Architekton Metrodoros Tekhnaios",
+  --     clan: "Artificers",
+  --     age: 44,
+  --     position: "Master of Naval Engineering",
+  --     background: "Metrodoros has designed...",
+  --     character_traits: "Brilliant and innovative...",
+  --     interests: "I believe my proven ability..."
+  --   },
+  --   { sequence: 2, name: "Sophia...", ... },
+  --   ...
+  -- ]
+  
+  -- Metadata
+  description TEXT,
+  author TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  is_active BOOLEAN DEFAULT TRUE,
+  
+  UNIQUE(name, version, language)
+);
+
+CREATE INDEX idx_simulation_templates_active ON simulation_templates(is_active);
+CREATE INDEX idx_simulation_templates_language ON simulation_templates(language);
+```
+
+**MVP Configuration:**
+- **Single row** inserted during deployment: "The New King of Kourion v1.0" (ENG)
+- Facilitator automatically loads this default template when creating a simulation
+- Future versions (v1.1, v2.0) or translations (RU) can be added as new rows
+
+**Usage Pattern:**
+```typescript
+// Facilitator creates new simulation
+const template = await supabase
+  .from('simulation_templates')
+  .select('*')
+  .eq('is_active', true)
+  .single(); // MVP: Only one active template
+
+// Facilitator customizes (see Section 4.1 for full flow)
+const customization = {
+  selected_roles: template.canonical_roles.slice(0, 20), // Pick 20 of 30
+  role_edits: { /* optional changes */ },
+  ai_assignments: [
+    { role_name: 'Metrodoros', elevenlabs_agent_id: 'agent_male_01' }
+  ],
+  timing_adjustments: { /* stage duration overrides */ }
+};
+
+// System creates immutable sim_run instance
+const simRun = await createSimInstance(template, customization);
+```
+
+---
+
+### 3.4 Database Constraints & Business Rules
+
+#### Critical Constraints
+
+```sql
+-- 1. Only one active phase per run at a time
+CREATE UNIQUE INDEX idx_one_active_phase_per_run 
+ON phases(run_id) 
+WHERE status = 'active';
+
+-- 2. Only one current AI context per role
+CREATE UNIQUE INDEX idx_one_current_context_per_role
+ON ai_context(role_id)
+WHERE is_current = TRUE;
+
+-- 3. No voting twice in same phase
+ALTER TABLE votes 
+ADD CONSTRAINT unique_vote_per_phase_per_voter 
+UNIQUE(phase_id, vote_type, voter_role_id);
+
+-- 4. King decisions only once per run
+ALTER TABLE king_decisions
+ADD CONSTRAINT unique_decree_per_run
+UNIQUE(run_id);
+
+-- 5. Meeting participants must include organizer
+ALTER TABLE meetings
+ADD CONSTRAINT organizer_in_participants
+CHECK (participants @> jsonb_build_array(organizer_role_id::text));
+```
+
+#### Row-Level Security (RLS)
+
+```sql
+-- Example: Participants can only see their own role's data
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Facilitators see all roles"
+ON roles FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM users 
+    WHERE users.id = auth.uid() 
+    AND users.role = 'facilitator'
+  )
+);
+
+CREATE POLICY "Participants see only their role"
+ON roles FOR SELECT
+TO authenticated
+USING (
+  assigned_user_id = auth.uid()
+);
+
+-- Similar policies for meetings, votes, etc.
+```
+
+---
 
 ## 4. DATA FLOW PATTERNS
 
@@ -1412,140 +2350,6 @@ Update your cognitive state based on this new information.
 ---
 
 ## 7. AI INTEGRATION ARCHITECTURE
-
-### 7.0 AI Service Architecture Decision
-
-**⚠️ CRITICAL DECISION POINT: AI Orchestration Layer Implementation**
-
-The AI participant system requires a dedicated service layer to orchestrate LLM API calls, manage context updates, and handle AI decision-making. The database schema is ready (see `ai_context`, `ai_prompts` tables in [KING_DATA_ARCHITECTURE.md](./KING_DATA_ARCHITECTURE.md)), but the **AI orchestration service architecture** needs to be decided before Phase 3.3 implementation.
-
-#### **Option A: Supabase Edge Functions (Deno Runtime)**
-
-**Architecture:**
-```
-Frontend → Supabase Edge Functions (Deno) → LLM APIs (Claude/Gemini/OpenAI)
-                    ↓
-              PostgreSQL (ai_context, ai_prompts)
-```
-
-**Pros:**
-- ✅ Same platform as database (simpler deployment, single vendor)
-- ✅ Fast cold start (<100ms), good for infrequent AI calls
-- ✅ Built-in authentication & RLS integration
-- ✅ TypeScript/Deno familiar to frontend team
-- ✅ Auto-scaling, serverless pricing (pay per invocation)
-
-**Cons:**
-- ⚠️ Deno ecosystem smaller than Node.js (some LLM SDKs may lack Deno support)
-- ⚠️ 60-second execution limit per function (may need workarounds for long AI operations)
-- ⚠️ Limited observability (basic logging only)
-- ⚠️ Vendor lock-in to Supabase platform
-
-**Best For:** MVP, smaller simulations (5-10 AI participants), simple AI operations
-
----
-
-#### **Option B: Separate Node.js/Python AI Service**
-
-**Architecture:**
-```
-Frontend → Supabase DB → Webhook/Queue → External AI Service (Node.js/Python)
-                                                ↓
-                                           LLM APIs
-```
-
-**Pros:**
-- ✅ Full control over runtime environment (Node.js or Python)
-- ✅ Rich LLM SDK ecosystem (LangChain, Anthropic SDK, Vertex AI, etc.)
-- ✅ No execution time limits (can handle long-running AI operations)
-- ✅ Better observability (Sentry, DataDog, custom metrics)
-- ✅ Can run complex AI workflows (multi-step reasoning, agent frameworks)
-- ✅ Platform-agnostic (can deploy to any cloud: Railway, Render, AWS Lambda, etc.)
-
-**Cons:**
-- ⚠️ Additional deployment complexity (separate service to manage)
-- ⚠️ Requires queue/webhook infrastructure (Supabase Webhooks or external queue like Bull/BullMQ)
-- ⚠️ Higher operational cost (always-running server or cold start penalty if serverless)
-- ⚠️ More complex auth (need API keys or JWT validation)
-
-**Best For:** Production, larger simulations (10+ AI participants), complex AI reasoning, long-term maintenance
-
----
-
-#### **Option C: Hybrid Approach**
-
-**Architecture:**
-```
-Simple Operations → Supabase Edge Functions (quick decisions, context queries)
-Complex Operations → External AI Service (context updates, multi-step reasoning)
-```
-
-**Pros:**
-- ✅ Optimizes cost (Edge Functions for cheap, fast operations)
-- ✅ Uses external service only when needed (context updates, complex decisions)
-- ✅ Flexibility to evolve (start with Edge Functions, add external service later)
-
-**Cons:**
-- ⚠️ Highest complexity (maintaining two systems)
-- ⚠️ Need clear decision boundary (which operations go where)
-- ⚠️ Potential for consistency issues (two code paths)
-
-**Best For:** Long-term projects with evolving requirements
-
----
-
-#### **Recommendation Matrix**
-
-| Criterion | Option A (Edge Functions) | Option B (External Service) | Option C (Hybrid) |
-|-----------|---------------------------|----------------------------|-------------------|
-| **MVP Speed** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ |
-| **Operational Simplicity** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐ |
-| **LLM SDK Support** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **Execution Time Limit** | ⭐⭐ (60s) | ⭐⭐⭐⭐⭐ (unlimited) | ⭐⭐⭐⭐ |
-| **Observability** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **Scalability** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| **Cost (Small Scale)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **Long-term Flexibility** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-
----
-
-#### **Recommended Path for KING SIM:**
-
-**Phase 1 (MVP - Current):** **Option A - Supabase Edge Functions**
-- Get AI participants working quickly
-- Validate AI prompts and context updates
-- Test with 5-10 AI participants
-- Minimal operational complexity
-
-**Phase 2 (Production):** **Evaluate and optionally migrate to Option B**
-- If AI operations frequently hit 60s limit → migrate to external service
-- If need advanced LLM frameworks (LangChain agents, etc.) → external service
-- If need better observability → external service
-- Otherwise, stay with Edge Functions
-
-**Implementation Notes:**
-1. **Abstract AI operations behind interface** - Make it easy to swap implementations
-2. **Start with Edge Functions for all operations** - Simplest path to working AI
-3. **Monitor execution times and success rates** - Decide if migration needed
-4. **Keep database schema platform-agnostic** - AI service can change, data stays same
-
----
-
-#### **Next Steps Before AI Implementation:**
-
-- [ ] **Decision:** Choose Option A (Edge Functions) for MVP (recommended)
-- [ ] **Create:** `/supabase/functions/ai-update-context/` - Edge Function for context updates
-- [ ] **Create:** `/supabase/functions/ai-decide-action/` - Edge Function for AI decisions
-- [ ] **Test:** LLM API integration (Anthropic Claude SDK in Deno)
-- [ ] **Implement:** Context update triggers (speech heard, meeting ended, vote result)
-- [ ] **Document:** API contracts for AI operations (see Section 6.1.3)
-
-**📚 Related Documentation:**
-- AI Character Design: [KING_AI_DESIGN.md](./KING_AI_DESIGN.md)
-- AI Data Schema: [KING_DATA_ARCHITECTURE.md](./KING_DATA_ARCHITECTURE.md) Section 1.6
-- AI Prompts: [KING_AI_DESIGN.md](./KING_AI_DESIGN.md) Section on prompt templates
-
----
 
 ### 7.1 AI Participant Components
 

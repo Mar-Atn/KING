@@ -98,16 +98,24 @@ export function FacilitatorSimulation() {
       }
 
       // Reset the phase timer and status
-      await supabase
+      const newStartedAt = new Date().toISOString()
+      console.log('📝 Updating phase started_at to:', newStartedAt)
+
+      const { error: updateError } = await supabase
         .from('phases')
         .update({
-          started_at: new Date().toISOString(),
+          started_at: newStartedAt,
           ended_at: null,
           status: 'active'
         })
         .eq('phase_id', currentPhase.phase_id)
 
-      console.log('✅ Phase reset complete')
+      if (updateError) {
+        console.error('❌ Failed to update phase:', updateError)
+        throw updateError
+      }
+
+      console.log('✅ Phase reset complete - started_at updated to NOW')
       alert('Phase has been reset successfully!')
 
       // Reload the page to refresh all data
@@ -282,15 +290,18 @@ export function FacilitatorSimulation() {
     try {
       if (phaseName === 'Vote 1') {
         // Get nominees from clan nominations phase
-        // Find the nomination phase
-        const nominationPhase = allPhases.find(p =>
-          p.name.toLowerCase().includes('nominate')
-        )
+        // Find the "Clans nominate candidates (decision)" phase
+        const nominationPhase = allPhases.find(p => {
+          const name = p.name.toLowerCase()
+          return name.includes('nominate') && name.includes('decision')
+        })
 
         if (!nominationPhase) {
-          console.error('No nomination phase found')
+          console.error('No nomination decision phase found. Available phases:', allPhases.map(p => p.name))
           return []
         }
+
+        console.log('✓ Found nomination phase:', nominationPhase.name, nominationPhase.phase_id)
 
         // Get all vote sessions from nomination phase
         const { data: sessions } = await supabase
@@ -307,17 +318,25 @@ export function FacilitatorSimulation() {
         // Get results from all sessions
         const { data: results } = await supabase
           .from('vote_results')
-          .select('winning_role_id')
+          .select('results_data')
           .in('session_id', sessions.map(s => s.session_id))
-          .not('winning_role_id', 'is', null)
 
         if (!results || results.length === 0) {
           console.error('No winners found from clan nominations')
           return []
         }
 
+        // Extract winner role_ids from results_data JSONB
+        const winnerRoleIds = results
+          .map(r => r.results_data?.winner?.role_id)
+          .filter(Boolean) as string[]
+
+        if (winnerRoleIds.length === 0) {
+          console.error('No valid winners in results_data')
+          return []
+        }
+
         // Get role details for all winners
-        const winnerRoleIds = results.map(r => r.winning_role_id)
         const { data: nominees } = await supabase
           .from('roles')
           .select('*')
@@ -351,27 +370,27 @@ export function FacilitatorSimulation() {
         // Get result
         const { data: result } = await supabase
           .from('vote_results')
-          .select('vote_counts, threshold_met, winning_role_id')
+          .select('results_data')
           .eq('session_id', session.session_id)
           .single()
 
-        if (!result) {
+        if (!result || !result.results_data) {
           console.error('No Vote 1 result found')
           return []
         }
 
         let topCandidateIds: string[] = []
 
-        if (result.threshold_met && result.winning_role_id) {
+        if (result.results_data.threshold_met && result.results_data.winner) {
           // Winner found in Vote 1 - shouldn't happen, but handle it
-          topCandidateIds = [result.winning_role_id]
+          topCandidateIds = [result.results_data.winner.role_id]
         } else {
-          // Get top 2 candidates
-          const voteCounts = result.vote_counts as Record<string, number>
-          const sorted = Object.entries(voteCounts)
-            .sort(([, a], [, b]) => b - a)
+          // Get top 2 candidates from all_candidates array
+          const allCandidates = result.results_data.all_candidates || []
+          const sorted = allCandidates
+            .sort((a: any, b: any) => b.vote_count - a.vote_count)
             .slice(0, 2)
-            .map(([roleId]) => roleId)
+            .map((c: any) => c.role_id)
 
           topCandidateIds = sorted
         }
