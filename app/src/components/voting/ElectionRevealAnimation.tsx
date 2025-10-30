@@ -494,59 +494,32 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
     }
   }, [targetId])
 
-  // Start from LEFT UPPER CORNER of the centered announcement text
-  const startX = window.innerWidth / 2 - 300 // Left edge of centered text box
-  const startY = 192 // Same as top-48 (announcement text level)
-
   const hasVoterInfo = coin.voterRole && coin.chosenRole
 
   return (
     <>
-      {/* Large Coin with voter's face - no spinning */}
-      <motion.div
-        initial={{
-          x: startX,
-          y: startY,
-          scale: 0,
-          opacity: 0
-        }}
-        animate={{
-          x: targetPosition.x,
-          y: targetPosition.y,
-          scale: [0, 1.5, 1],
-          opacity: [0, 1, 1, 1, 0]
-        }}
-        transition={{
-          duration: 1.8,
-          ease: 'easeInOut'
-        }}
-        className="fixed w-32 h-32 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 border-4 border-amber-300 shadow-2xl flex items-center justify-center pointer-events-none"
-        style={{
-          boxShadow: '0 8px 16px rgba(0,0,0,0.6), inset 0 4px 4px rgba(255,255,255,0.5)',
-          zIndex: 100
-        }}
-      >
-        {hasVoterInfo && coin.voterRole?.avatar_url ? (
-          <img
-            src={coin.voterRole.avatar_url}
-            alt={coin.voterRole.name}
-            className="w-28 h-28 rounded-full object-cover"
-          />
-        ) : (
-          <span className="text-4xl font-bold text-amber-900">⚜</span>
-        )}
-      </motion.div>
-
-      {/* Vote announcement text - centered between header and candidates */}
+      {/* Vote announcement with voter avatar (left) and clan logo (right) - NO FLYING */}
       {hasVoterInfo && (
-        <div className="fixed top-48 left-0 right-0 flex justify-center pointer-events-none" style={{ zIndex: 101 }}>
+        <div className="fixed top-48 left-0 right-0 flex justify-center items-center gap-6 pointer-events-none" style={{ zIndex: 101 }}>
+          {/* Voter Avatar on LEFT */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: [0, 1, 1, 0], scale: [0.5, 1, 1, 1] }}
+            transition={{ duration: 2.16, ease: 'easeOut' }}
+          >
+            <img
+              src={coin.voterRole.avatar_url || '/placeholder-avatar.png'}
+              alt={coin.voterRole.name}
+              className="w-24 h-24 rounded-full border-4 object-cover shadow-2xl"
+              style={{ borderColor: coin.voterClan?.color_hex || '#B8860B' }}
+            />
+          </motion.div>
+
+          {/* Announcement Text in CENTER */}
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: [0, 1, 1, 0] }}
-            transition={{
-              duration: 1.8,
-              ease: 'easeOut'
-            }}
+            transition={{ duration: 2.16, ease: 'easeOut' }}
           >
             <div className="bg-neutral-800 bg-opacity-95 border-3 border-amber-500 rounded-xl px-6 py-4 shadow-2xl">
               <div className="text-white text-2xl font-bold text-center whitespace-nowrap">
@@ -561,6 +534,20 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
                 <span className="text-amber-200 font-extrabold">{coin.chosenRole?.name}</span>
               </div>
             </div>
+          </motion.div>
+
+          {/* Voter's Clan Logo on RIGHT */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: [0, 1, 1, 0], scale: [0.5, 1, 1, 1] }}
+            transition={{ duration: 2.16, ease: 'easeOut' }}
+          >
+            <img
+              src={coin.voterClan?.emblem_url || '/placeholder-avatar.png'}
+              alt={coin.voterClan?.name}
+              className="w-24 h-24 rounded-full border-4 object-contain bg-neutral-800 shadow-2xl p-2"
+              style={{ borderColor: coin.voterClan?.color_hex || '#B8860B' }}
+            />
           </motion.div>
         </div>
       )}
