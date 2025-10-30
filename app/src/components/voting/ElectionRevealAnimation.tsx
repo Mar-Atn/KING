@@ -494,9 +494,9 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
     }
   }, [targetId])
 
-  // Start from LEFT of the announcement text
-  const startX = window.innerWidth / 2 - 350 // Left of center, next to announcement
-  const startY = 180 // Below header, in announcement area
+  // Start from LEFT of the announcement text (same vertical level)
+  const startX = window.innerWidth / 2 - 400 // 400px left of screen center
+  const startY = 192 // Same as top-48 (announcement text level)
 
   const hasVoterInfo = coin.voterRole && coin.chosenRole
 
@@ -539,7 +539,7 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
         )}
       </motion.div>
 
-      {/* Vote announcement text - positioned in reserved space between header and candidates */}
+      {/* Vote announcement text - centered between header and candidates */}
       {hasVoterInfo && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -548,11 +548,15 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
             duration: 1.8,
             ease: 'easeOut'
           }}
-          className="fixed top-48 left-1/2 transform -translate-x-1/2 pointer-events-none"
-          style={{ zIndex: 101 }}
+          className="fixed top-48 pointer-events-none"
+          style={{
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 101
+          }}
         >
-          <div className="bg-neutral-800 bg-opacity-95 border-3 border-amber-500 rounded-xl px-8 py-5 shadow-2xl">
-            <div className="text-white text-2xl font-bold text-center">
+          <div className="bg-neutral-800 bg-opacity-95 border-3 border-amber-500 rounded-xl px-6 py-4 shadow-2xl">
+            <div className="text-white text-2xl font-bold text-center whitespace-nowrap">
               <span style={{ color: coin.voterClan?.color_hex || '#B8860B' }}>
                 {coin.voterRole?.name}
               </span>
