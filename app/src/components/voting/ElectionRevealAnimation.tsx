@@ -494,9 +494,9 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
     }
   }, [targetId])
 
-  // Start from OFF-SCREEN upper right corner
-  const startX = window.innerWidth + 100 // Completely off-screen to the right
-  const startY = 160 // Upper area of screen
+  // Start from visible upper right corner of screen (next to announcement text)
+  const startX = window.innerWidth - 150 // Upper right corner, visible on screen
+  const startY = 180 // Below header, in announcement area
 
   const hasVoterInfo = coin.voterRole && coin.chosenRole
 
