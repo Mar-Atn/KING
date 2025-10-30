@@ -759,7 +759,7 @@ export function FacilitatorSimulation() {
             ) : null}
 
             {/* Clan Allegiance Voting (Final Phase) */}
-            {currentPhase && currentPhase.name.toLowerCase().includes('clan') && currentPhase.name.toLowerCase().includes('allegiance') ? (
+            {currentPhase && currentPhase.name.toLowerCase().includes('final') && currentPhase.name.toLowerCase().includes('decision') ? (
               <div className="mb-6">
                 <ClanAllegianceControls
                   runId={runId!}
