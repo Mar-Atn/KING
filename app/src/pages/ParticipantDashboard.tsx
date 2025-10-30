@@ -1013,6 +1013,14 @@ export function ParticipantDashboard() {
     )
   }
 
+  console.log('✅ [ParticipantDashboard] Main render executing', {
+    hasRole: !!role,
+    hasClan: !!clanData,
+    hasPhase: !!currentPhase,
+    phaseName: currentPhase?.name,
+    clanVotesCount: clanVotes.length
+  })
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
