@@ -92,11 +92,11 @@ export function PhaseChangeModal({
                   transition={{ delay: 0.3 }}
                   className="text-3xl font-bold text-amber-900 mb-2"
                 >
-                  New Phase Started!
+                  {previousPhaseName === newPhase.name ? 'Phase Restarted!' : 'New Phase Started!'}
                 </motion.h2>
 
-                {/* Previous phase (if exists) */}
-                {previousPhaseName && (
+                {/* Previous phase (if exists and different) */}
+                {previousPhaseName && previousPhaseName !== newPhase.name && (
                   <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -104,6 +104,18 @@ export function PhaseChangeModal({
                     className="text-sm text-amber-700 mb-4"
                   >
                     {previousPhaseName} → <strong>{newPhase.name}</strong>
+                  </motion.p>
+                )}
+
+                {/* Phase restart message */}
+                {previousPhaseName === newPhase.name && (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                    className="text-sm text-amber-700 mb-4"
+                  >
+                    The facilitator has reset this phase. Timer and voting have been restarted.
                   </motion.p>
                 )}
 

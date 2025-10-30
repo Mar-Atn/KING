@@ -5,6 +5,8 @@ import { usePhaseStore } from '../stores/phaseStore'
 import { usePhaseSync } from '../hooks/usePhaseSync'
 import { PhaseControls } from '../components/PhaseControls'
 import { VotingControls } from '../components/voting/VotingControls'
+import { ClanNominationsControls } from '../components/voting/ClanNominationsControls'
+import { ElectionRoundControls } from '../components/voting/ElectionRoundControls'
 import type { SimRun, Clan, Role } from '../types/database'
 
 export function FacilitatorSimulation() {
@@ -14,6 +16,7 @@ export function FacilitatorSimulation() {
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [electionCandidates, setElectionCandidates] = useState<Role[]>([])
 
   const { loadPhases, allPhases, currentPhase } = usePhaseStore()
   const { connectionStatus } = usePhaseSync(runId || null)
@@ -42,6 +45,79 @@ export function FacilitatorSimulation() {
     } catch (err: any) {
       console.error('Error canceling registration:', err)
       setError(err.message || 'Failed to cancel registration')
+    }
+  }
+
+  // Restart current phase - reset phase voting and timer
+  const handleRestartPhase = async () => {
+    if (!runId || !currentPhase) return
+
+    const confirmed = window.confirm(
+      '⚠️ Restart Current Phase?\n\n' +
+      'This will:\n' +
+      '• Delete all votes for this phase\n' +
+      '• Delete all voting sessions\n' +
+      '• Reset the phase timer\n' +
+      '• Reset the phase to fresh state\n\n' +
+      'Continue?'
+    )
+
+    if (!confirmed) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      console.log('🔄 Restarting current phase...')
+
+      // Get all vote sessions for this phase
+      const { data: phaseSessions } = await supabase
+        .from('vote_sessions')
+        .select('session_id')
+        .eq('phase_id', currentPhase.phase_id)
+
+      if (phaseSessions && phaseSessions.length > 0) {
+        // Delete all votes for sessions in this phase
+        for (const session of phaseSessions) {
+          await supabase
+            .from('votes')
+            .delete()
+            .eq('session_id', session.session_id)
+
+          await supabase
+            .from('vote_results')
+            .delete()
+            .eq('session_id', session.session_id)
+        }
+
+        // Delete all vote sessions for this phase
+        await supabase
+          .from('vote_sessions')
+          .delete()
+          .eq('phase_id', currentPhase.phase_id)
+      }
+
+      // Reset the phase timer and status
+      await supabase
+        .from('phases')
+        .update({
+          started_at: new Date().toISOString(),
+          ended_at: null,
+          status: 'active'
+        })
+        .eq('phase_id', currentPhase.phase_id)
+
+      console.log('✅ Phase reset complete')
+      alert('Phase has been reset successfully!')
+
+      // Reload the page to refresh all data
+      window.location.reload()
+
+    } catch (err: any) {
+      console.error('Error restarting phase:', err)
+      setError(err.message || 'Failed to restart phase')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -199,6 +275,123 @@ export function FacilitatorSimulation() {
     }
   }
 
+  // Fetch election candidates for Vote 1 or Vote 2
+  const fetchElectionCandidates = async (phaseName: string) => {
+    if (!runId) return []
+
+    try {
+      if (phaseName === 'Vote 1') {
+        // Get nominees from clan nominations phase
+        // Find the nomination phase
+        const nominationPhase = allPhases.find(p =>
+          p.name.toLowerCase().includes('nominate')
+        )
+
+        if (!nominationPhase) {
+          console.error('No nomination phase found')
+          return []
+        }
+
+        // Get all vote sessions from nomination phase
+        const { data: sessions } = await supabase
+          .from('vote_sessions')
+          .select('session_id')
+          .eq('phase_id', nominationPhase.phase_id)
+          .eq('status', 'announced')
+
+        if (!sessions || sessions.length === 0) {
+          console.error('No announced nomination sessions found')
+          return []
+        }
+
+        // Get results from all sessions
+        const { data: results } = await supabase
+          .from('vote_results')
+          .select('winning_role_id')
+          .in('session_id', sessions.map(s => s.session_id))
+          .not('winning_role_id', 'is', null)
+
+        if (!results || results.length === 0) {
+          console.error('No winners found from clan nominations')
+          return []
+        }
+
+        // Get role details for all winners
+        const winnerRoleIds = results.map(r => r.winning_role_id)
+        const { data: nominees } = await supabase
+          .from('roles')
+          .select('*')
+          .in('role_id', winnerRoleIds)
+
+        return nominees || []
+
+      } else if (phaseName === 'Vote 2') {
+        // Get top candidates from Vote 1
+        // Find Vote 1 phase
+        const vote1Phase = allPhases.find(p => p.name === 'Vote 1')
+
+        if (!vote1Phase) {
+          console.error('No Vote 1 phase found')
+          return []
+        }
+
+        // Get Vote 1 session
+        const { data: session } = await supabase
+          .from('vote_sessions')
+          .select('session_id')
+          .eq('phase_id', vote1Phase.phase_id)
+          .eq('status', 'announced')
+          .maybeSingle()
+
+        if (!session) {
+          console.error('No announced Vote 1 session found')
+          return []
+        }
+
+        // Get result
+        const { data: result } = await supabase
+          .from('vote_results')
+          .select('vote_counts, threshold_met, winning_role_id')
+          .eq('session_id', session.session_id)
+          .single()
+
+        if (!result) {
+          console.error('No Vote 1 result found')
+          return []
+        }
+
+        let topCandidateIds: string[] = []
+
+        if (result.threshold_met && result.winning_role_id) {
+          // Winner found in Vote 1 - shouldn't happen, but handle it
+          topCandidateIds = [result.winning_role_id]
+        } else {
+          // Get top 2 candidates
+          const voteCounts = result.vote_counts as Record<string, number>
+          const sorted = Object.entries(voteCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 2)
+            .map(([roleId]) => roleId)
+
+          topCandidateIds = sorted
+        }
+
+        // Get role details
+        const { data: topCandidates } = await supabase
+          .from('roles')
+          .select('*')
+          .in('role_id', topCandidateIds)
+
+        return topCandidates || []
+      }
+
+      return []
+    } catch (err) {
+      console.error('Error fetching election candidates:', err)
+      return []
+    }
+  }
+
   // Load simulation data
   const loadSimulation = async () => {
     if (!runId) return
@@ -278,6 +471,21 @@ export function FacilitatorSimulation() {
   useEffect(() => {
     loadSimulation()
   }, [runId, loadPhases])
+
+  // Fetch election candidates when phase is Vote 1 or Vote 2
+  useEffect(() => {
+    if (!currentPhase || !allPhases.length) return
+
+    const phaseName = currentPhase.name
+
+    if (phaseName === 'Vote 1' || phaseName === 'Vote 2') {
+      fetchElectionCandidates(phaseName).then(candidates => {
+        setElectionCandidates(candidates)
+      })
+    } else {
+      setElectionCandidates([])
+    }
+  }, [currentPhase, allPhases])
 
   if (loading) {
     return (
@@ -418,10 +626,42 @@ export function FacilitatorSimulation() {
               </div>
             )}
 
+            {/* Clan Nominations Voting (appears only in nomination phase) */}
+            {currentPhase && currentPhase.name.toLowerCase().includes('nominate') ? (
+              <>
+                <ClanNominationsControls
+                  runId={runId!}
+                  phaseId={currentPhase.phase_id}
+                  phaseName={currentPhase.name}
+                  clans={clans}
+                  roles={roles}
+                />
+              </>
+            ) : null}
+
+            {/* Election Round Voting (Vote 1 or Vote 2) */}
+            {currentPhase && (currentPhase.name === 'Vote 1' || currentPhase.name === 'Vote 2') && simulation ? (
+              <ElectionRoundControls
+                runId={runId!}
+                phaseId={currentPhase.phase_id}
+                phaseName={currentPhase.name}
+                roundNumber={currentPhase.name === 'Vote 1' ? 1 : 2}
+                threshold={
+                  currentPhase.name === 'Vote 1'
+                    ? simulation.vote_1_threshold || Math.ceil((simulation.total_participants || 12) * 2 / 3)
+                    : simulation.vote_2_threshold || Math.ceil((simulation.total_participants || 12) * 2 / 3)
+                }
+                candidates={electionCandidates}
+              />
+            ) : null}
+
             <PhaseControls runId={runId!} />
 
-            {/* Voting Management */}
-            {currentPhase && (
+            {/* Voting Management - HIDE during nomination/election phases (specialized controls handle them) */}
+            {currentPhase &&
+              !currentPhase.name.toLowerCase().includes('nominate') &&
+              currentPhase.name !== 'Vote 1' &&
+              currentPhase.name !== 'Vote 2' && (
               <div className="mt-6">
                 <VotingControls
                   runId={runId!}
@@ -582,11 +822,23 @@ export function FacilitatorSimulation() {
                 {/* Divider */}
                 <div className="border-t-2 border-neutral-200 my-4" />
 
+                {/* Restart Phase */}
+                <button
+                  onClick={handleRestartPhase}
+                  disabled={loading || !currentPhase}
+                  className="w-full px-4 py-2 bg-accent bg-opacity-10 border-2 border-accent text-accent rounded-lg hover:bg-accent hover:text-white transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  🔄 Restart Phase
+                </button>
+                <p className="text-xs text-neutral-500 mt-1 px-2">
+                  Reset current phase voting (for testing)
+                </p>
+
                 {/* Re-Start Simulation */}
                 <button
                   onClick={handleRestartSimulation}
                   disabled={loading}
-                  className="w-full px-4 py-2 bg-warning bg-opacity-10 border-2 border-warning text-warning rounded-lg hover:bg-warning hover:text-white transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2 bg-warning bg-opacity-10 border-2 border-warning text-warning rounded-lg hover:bg-warning hover:text-white transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed mt-2"
                 >
                   🔄 Re-Start Simulation
                 </button>

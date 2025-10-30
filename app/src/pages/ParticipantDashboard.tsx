@@ -15,10 +15,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getRoleForUser } from '../lib/data/participants'
 import { PhaseChangeModal } from '../components/PhaseChangeModal'
+import { PhaseTimer } from '../components/PhaseTimer'
 import { Ballot } from '../components/voting/Ballot'
 import { ResultsDisplay } from '../components/voting/ResultsDisplay'
+import { ClanNominationsReveal } from '../components/voting/ClanNominationsReveal'
+import { ElectionWinnerReveal } from '../components/voting/ElectionWinnerReveal'
 import { useVoting } from '../hooks/useVoting'
-import type { Role, Clan, Phase, SimRun } from '../types/database'
+import type { Role, Clan, Phase, SimRun, VoteResult } from '../types/database'
 
 type Tab = 'role' | 'clan' | 'process' | 'materials'
 
@@ -42,6 +45,7 @@ export function ParticipantDashboard() {
   const [newPhaseForModal, setNewPhaseForModal] = useState<Phase | null>(null)
   const [previousPhaseName, setPreviousPhaseName] = useState<string | undefined>()
   const previousPhaseIdRef = useRef<string | null>(null)
+  const currentPhaseStartedAtRef = useRef<string | null>(null)
 
   // Helper to check if role reveal has been seen (uses localStorage with simulation timestamp)
   const getHasSeenRoleReveal = (startedAt: string | null): boolean => {
@@ -66,11 +70,31 @@ export function ParticipantDashboard() {
   const [showBallot, setShowBallot] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [selectedResultSession, setSelectedResultSession] = useState<any>(null)
+  const [myVoteStatus, setMyVoteStatus] = useState<Record<string, boolean>>({}) // session_id -> has voted
   const { sessions, fetchSessions, fetchResults } = useVoting({
     runId: runId || undefined,
     phaseId: simulation?.current_phase_id || undefined,
     roleId: role?.role_id
   })
+
+  // Reveal state
+  const [showReveal, setShowReveal] = useState(false)
+  const [revealType, setRevealType] = useState<'clan_nomination' | 'election'>('clan_nomination')
+  const [reveals, setReveals] = useState<Array<{
+    clan: Clan
+    nominee: Role
+    session: any
+    result: VoteResult
+  }>>([])
+  const [electionReveal, setElectionReveal] = useState<{
+    session: any
+    result: VoteResult
+    winner: Role | null
+    clan: Clan | null
+    roundNumber: 1 | 2
+    thresholdMet: boolean
+    topCandidates?: { role: Role; voteCount: number }[]
+  } | null>(null)
 
   // Load all data (run only once on mount)
   useEffect(() => {
@@ -177,6 +201,11 @@ export function ParticipantDashboard() {
         // Initialize the phase ref with current phase (for detecting changes later)
         if (simResult.data?.current_phase_id) {
           previousPhaseIdRef.current = simResult.data.current_phase_id
+          // Also track current phase's started_at to detect restarts
+          const currentPhase = phasesResult.data?.find(p => p.phase_id === simResult.data.current_phase_id)
+          if (currentPhase?.started_at) {
+            currentPhaseStartedAtRef.current = currentPhase.started_at
+          }
         }
 
         const totalDuration = Date.now() - loadStart
@@ -316,6 +345,35 @@ export function ParticipantDashboard() {
         },
         (payload) => {
           console.log('Phase updated:', payload)
+
+          // Check if this is the current phase being restarted
+          if (payload.eventType === 'UPDATE' && simulation?.current_phase_id) {
+            const updatedPhase = payload.new as Phase
+
+            // If the updated phase is the current phase
+            if (updatedPhase.phase_id === simulation.current_phase_id) {
+              const oldStartedAt = currentPhaseStartedAtRef.current
+              const newStartedAt = updatedPhase.started_at
+
+              // If started_at changed, phase was restarted
+              if (oldStartedAt && newStartedAt && oldStartedAt !== newStartedAt) {
+                console.log('🔄 Current phase restarted!', {
+                  phase: updatedPhase.name,
+                  oldStartedAt,
+                  newStartedAt
+                })
+
+                // Show notification modal
+                setNewPhaseForModal(updatedPhase)
+                setPreviousPhaseName(updatedPhase.name) // Same phase name
+                setShowPhaseModal(true)
+
+                // Update ref
+                currentPhaseStartedAtRef.current = newStartedAt
+              }
+            }
+          }
+
           // Reload phases to get fresh data
           supabase
             .from('phases')
@@ -337,6 +395,216 @@ export function ParticipantDashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, runId]) // Effect runs when user or runId changes
+
+  // Check if participant has already voted in current sessions
+  useEffect(() => {
+    if (!role || sessions.length === 0) return
+
+    const checkVoteStatus = async () => {
+      const statusMap: Record<string, boolean> = {}
+
+      for (const session of sessions) {
+        const { data } = await supabase
+          .from('votes')
+          .select('vote_id')
+          .eq('session_id', session.session_id)
+          .eq('voter_role_id', role.role_id)
+          .limit(1)
+
+        statusMap[session.session_id] = (data && data.length > 0) || false
+      }
+
+      setMyVoteStatus(statusMap)
+    }
+
+    checkVoteStatus()
+  }, [sessions, role])
+
+  // Detect announced sessions and trigger reveal animation
+  useEffect(() => {
+    if (!role || sessions.length === 0 || allClans.length === 0 || allRoles.length === 0) {
+      console.log('🔍 [Reveal Detection] Skipping - missing data:', {
+        hasRole: !!role,
+        sessionsCount: sessions.length,
+        clansCount: allClans.length,
+        rolesCount: allRoles.length
+      })
+      return
+    }
+
+    const fetchAnnouncedResults = async () => {
+      console.log('🔍 [Reveal Detection] Checking sessions:', sessions.map(s => ({
+        id: s.session_id,
+        title: s.proposal_title,
+        status: s.status,
+        scope: s.scope,
+        announced_at: s.announced_at
+      })))
+
+      const announcedSessions = sessions.filter(s => {
+        const isAnnounced = s.status === 'announced'
+        console.log(`  Session ${s.proposal_title}: status=${s.status}, scope=${s.scope}, isAnnounced=${isAnnounced}`)
+        return isAnnounced
+      })
+
+      if (announcedSessions.length === 0) {
+        console.log('❌ [Reveal Detection] No announced sessions found')
+        setShowReveal(false)
+        return
+      }
+
+      console.log('🎉 [Reveal Detection] Detected announced sessions:', announcedSessions.length)
+
+      // Check if we've already shown these reveals
+      const seenKey = `revealed_${runId}_${announcedSessions.map(s => s.session_id).join('_')}`
+      if (localStorage.getItem(seenKey)) {
+        console.log('⏭️ [Reveal Detection] Already shown these reveals, skipping')
+        return
+      }
+
+      // Detect reveal type: clan nomination (scope=clan_only) or election (scope=all)
+      const firstSession = announcedSessions[0]
+
+      if (firstSession.scope === 'all') {
+        // Election reveal (Vote 1 or Vote 2)
+        console.log('🏛️ [Reveal Detection] Election reveal detected')
+
+        const session = firstSession
+
+        // Get vote result
+        const { data: resultData, error } = await supabase
+          .from('vote_results')
+          .select('*')
+          .eq('session_id', session.session_id)
+          .single()
+
+        if (error || !resultData) {
+          console.error('❌ Error fetching election result:', error)
+          return
+        }
+
+        console.log('✅ Found election result:', resultData)
+
+        // Parse results_data JSONB
+        const resultsData = resultData.results_data as any
+        if (!resultsData) {
+          console.error('❌ No results_data in vote_results')
+          return
+        }
+
+        // Determine round number from phase name
+        const roundNumber = (session.proposal_title === 'Vote 1' ? 1 : 2) as 1 | 2
+        const thresholdMet = resultsData.threshold_met || false
+
+        let winner: Role | null = null
+        let winnerClan: Clan | null = null
+        let topCandidates: { role: Role; voteCount: number }[] | undefined
+
+        if (thresholdMet && resultsData.winner) {
+          // Winner found
+          winner = allRoles.find(r => r.role_id === resultsData.winner.role_id) || null
+          if (winner) {
+            winnerClan = allClans.find(c => c.clan_id === winner.clan_id) || null
+          }
+        } else {
+          // No threshold met - get top candidates for runoff from all_candidates
+          const allCandidates = resultsData.all_candidates as Array<{ role_id: string; vote_count: number }>
+          const sorted = allCandidates
+            .sort((a, b) => b.vote_count - a.vote_count)
+            .slice(0, 2)
+
+          topCandidates = sorted.map(candidate => {
+            const role = allRoles.find(r => r.role_id === candidate.role_id)!
+            return { role, voteCount: candidate.vote_count }
+          }).filter(tc => tc.role)
+        }
+
+        setElectionReveal({
+          session,
+          result: resultData,
+          winner,
+          clan: winnerClan,
+          roundNumber,
+          thresholdMet,
+          topCandidates
+        })
+        setRevealType('election')
+        setShowReveal(true)
+        localStorage.setItem(seenKey, 'true')
+
+      } else {
+        // Clan nomination reveal (scope=clan_only)
+        console.log('🏛️ [Reveal Detection] Clan nomination reveal detected')
+
+        const revealsData = []
+
+        for (const session of announcedSessions) {
+          console.log(`  📊 Fetching results for session: ${session.proposal_title}`)
+
+          // Get vote result
+          const { data: resultData, error } = await supabase
+            .from('vote_results')
+            .select('*')
+            .eq('session_id', session.session_id)
+            .single()
+
+          if (error) {
+            console.error(`  ❌ Error fetching result for ${session.proposal_title}:`, error)
+            continue
+          }
+
+          if (!resultData) {
+            console.log(`  ⚠️ No result data for ${session.proposal_title}`)
+            continue
+          }
+
+          console.log(`  ✅ Found result:`, resultData)
+
+          // Parse results_data JSONB
+          const resultsData = resultData.results_data as any
+          if (!resultsData || !resultsData.winner) {
+            console.log(`  ⚠️ No winner in results_data`)
+            continue
+          }
+
+          // Find nominee
+          const nominee = allRoles.find(r => r.role_id === resultsData.winner.role_id)
+          if (!nominee) {
+            console.log(`  ⚠️ Nominee not found: ${resultsData.winner.role_id}`)
+            continue
+          }
+
+          // Find clan
+          const clan = allClans.find(c => c.clan_id === session.scope_clan_id)
+          if (!clan) {
+            console.log(`  ⚠️ Clan not found: ${session.scope_clan_id}`)
+            continue
+          }
+
+          console.log(`  ✅ Reveal data complete: ${clan.name} → ${nominee.name}`)
+
+          revealsData.push({
+            clan,
+            nominee,
+            session,
+            result: resultData
+          })
+        }
+
+        if (revealsData.length > 0) {
+          console.log('🎊 [Reveal Detection] Showing clan nomination reveal with', revealsData.length, 'clans')
+          setReveals(revealsData)
+          setRevealType('clan_nomination')
+          setShowReveal(true)
+          localStorage.setItem(seenKey, 'true')
+        } else {
+          console.log('❌ [Reveal Detection] No complete reveal data found')
+        }
+      }
+    }
+
+    fetchAnnouncedResults()
+  }, [sessions, role, allClans, allRoles, runId])
 
   // Show loading screen while auth is loading (prevents premature redirects)
   if (authLoading) {
@@ -389,17 +657,61 @@ export function ParticipantDashboard() {
   })
 
   // Find open vote for this participant
+  console.log('[ParticipantDashboard] Checking for open votes', {
+    totalSessions: sessions.length,
+    roleClanId: role?.clan_id,
+    sessionsData: sessions.map(s => ({
+      id: s.session_id,
+      title: s.proposal_title,
+      status: s.status,
+      scope: s.scope,
+      scope_clan_id: s.scope_clan_id
+    }))
+  })
+
   const openVote = sessions.find(s => {
-    if (s.status !== 'open') return false
+    console.log('[ParticipantDashboard] Checking session:', {
+      title: s.proposal_title,
+      status: s.status,
+      // @ts-ignore
+      started_at: s.started_at,
+      scope: s.scope,
+      scope_clan_id: s.scope_clan_id,
+      my_clan_id: role?.clan_id
+    })
 
-    // Check if participant is eligible to vote
-    if (s.scope === 'all') return true
-
-    if (s.scope === 'clan_only' && role) {
-      return s.scope_clan_id === role.clan_id
+    if (s.status !== 'open') {
+      console.log('  ❌ Rejected: status is not open')
+      return false
     }
 
+    // Check if voting has been started by facilitator
+    // @ts-ignore - started_at will exist after manual migration
+    if (!s.started_at) {
+      console.log('  ❌ Rejected: started_at is null (voting not started by facilitator)')
+      return false
+    }
+
+    // Check if participant is eligible to vote
+    if (s.scope === 'all') {
+      console.log('  ✅ Accepted: scope is all')
+      return true
+    }
+
+    if (s.scope === 'clan_only' && role) {
+      const eligible = s.scope_clan_id === role.clan_id
+      console.log(`  ${eligible ? '✅' : '❌'} Clan scope: my clan ${role.clan_id} ${eligible ? 'matches' : 'does not match'} ${s.scope_clan_id}`)
+      return eligible
+    }
+
+    console.log('  ❌ Rejected: scope check failed')
     return false
+  })
+
+  console.log('[ParticipantDashboard] Open vote result:', {
+    found: !!openVote,
+    title: openVote?.proposal_title,
+    totalSessions: sessions.length
   })
 
   // Find announced results for this participant
@@ -547,26 +859,28 @@ export function ParticipantDashboard() {
 
           {/* Current Phase Display - Prominent */}
           <div className="mt-6">
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl px-6 py-5 border-2 border-amber-200 shadow-md">
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl px-6 py-5 border-2 border-amber-200 shadow-md relative">
               {currentPhase ? (
                 <div>
+                  {/* Compact Timer - Upper Right */}
+                  <div className="absolute top-4 right-4">
+                    <PhaseTimer phase={currentPhase} compact={true} />
+                  </div>
+
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
                     <span className="text-sm font-medium text-amber-700 uppercase tracking-wider">
                       Current Phase
                     </span>
                   </div>
-                  <h2 className="text-4xl font-heading font-bold text-amber-900 mb-2">
+                  <h2 className="text-4xl font-heading font-bold text-amber-900 mb-2 pr-32">
                     {currentPhase.name}
                   </h2>
                   {currentPhase.description && (
-                    <p className="text-lg text-amber-800 leading-relaxed">
+                    <p className="text-lg text-amber-800 leading-relaxed mb-4">
                       {currentPhase.description}
                     </p>
                   )}
-                  <div className="mt-3 text-sm text-amber-700">
-                    Duration: {currentPhase.actual_duration_minutes || currentPhase.default_duration_minutes} minutes
-                  </div>
                 </div>
               ) : (
                 <div className="text-center py-4">
@@ -593,10 +907,21 @@ export function ParticipantDashboard() {
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="w-2 h-2 bg-amber-600 rounded-full animate-pulse" />
-                  <h3 className="font-semibold text-amber-900">
-                    🗳️ Vote Now: {openVote.proposal_title}
-                  </h3>
+                  {myVoteStatus[openVote.session_id] ? (
+                    <>
+                      <div className="w-2 h-2 bg-amber-700 rounded-full" />
+                      <h3 className="font-semibold text-amber-900">
+                        Vote Submitted: {openVote.proposal_title}
+                      </h3>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-2 h-2 bg-amber-600 rounded-full animate-pulse" />
+                      <h3 className="font-semibold text-amber-900">
+                        🗳️ Vote Now: {openVote.proposal_title}
+                      </h3>
+                    </>
+                  )}
                 </div>
                 {openVote.proposal_description && (
                   <p className="text-sm text-amber-700">
@@ -604,74 +929,24 @@ export function ParticipantDashboard() {
                   </p>
                 )}
               </div>
-              <button
-                onClick={() => setShowBallot(true)}
-                className="px-6 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-semibold shadow-md"
-              >
-                Cast Vote
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Announced Results Banner */}
-      {announcedSessions.length > 0 && (
-        <div className="bg-white border-b-2 border-neutral-200">
-          <div className="container mx-auto px-4 py-4">
-            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-2 h-2 bg-blue-600 rounded-full" />
-                    <h3 className="font-semibold text-blue-900">
-                      📊 Vote Results Announced ({announcedSessions.length})
-                    </h3>
-                  </div>
-                  <p className="text-sm text-blue-700">
-                    View the results from completed votes
-                  </p>
+              {myVoteStatus[openVote.session_id] ? (
+                <div className="px-6 py-3 bg-amber-700 text-white rounded-lg font-semibold shadow-md">
+                  Submitted
                 </div>
+              ) : (
                 <button
-                  onClick={async () => {
-                    // Show first announced session's results
-                    const session = announcedSessions[0]
-                    const results = await fetchResults(session.session_id)
-                    if (results) {
-                      setSelectedResultSession({ ...session, results })
-                      setShowResults(true)
-                    }
-                  }}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-md"
+                  onClick={() => setShowBallot(true)}
+                  className="px-6 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-semibold shadow-md"
                 >
-                  View Results
+                  Cast Vote
                 </button>
-              </div>
-              {announcedSessions.length > 1 && (
-                <div className="mt-3 pt-3 border-t border-blue-200">
-                  <p className="text-xs text-blue-600">
-                    {announcedSessions.slice(1).map((s, i) => (
-                      <button
-                        key={s.session_id}
-                        onClick={async () => {
-                          const results = await fetchResults(s.session_id)
-                          if (results) {
-                            setSelectedResultSession({ ...s, results })
-                            setShowResults(true)
-                          }
-                        }}
-                        className="mr-3 underline hover:text-blue-800"
-                      >
-                        {s.proposal_title}
-                      </button>
-                    ))}
-                  </p>
-                </div>
               )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Removed "View Results Announced" banner - reveal animation shows automatically */}
 
       {/* Tab Navigation */}
       <div className="bg-white border-b border-neutral-200">
@@ -1189,9 +1464,11 @@ export function ParticipantDashboard() {
           myRoleId={role.role_id}
           myClanId={role.clan_id}
           allRoles={allRoles}
-          onVoteSubmitted={() => {
+          onVoteSubmitted={async () => {
+            // Mark as voted immediately
+            setMyVoteStatus(prev => ({ ...prev, [openVote.session_id]: true }))
             // Refresh vote sessions to update status
-            fetchSessions()
+            await fetchSessions()
             setShowBallot(false)
           }}
           onClose={() => setShowBallot(false)}
@@ -1207,6 +1484,28 @@ export function ParticipantDashboard() {
           onClose={() => {
             setShowResults(false)
             setSelectedResultSession(null)
+          }}
+        />
+      )}
+
+      {/* Clan Nominations Reveal Animation */}
+      {showReveal && revealType === 'clan_nomination' && reveals.length > 0 && (
+        <ClanNominationsReveal
+          reveals={reveals}
+          onComplete={() => {
+            setShowReveal(false)
+            setReveals([])
+          }}
+        />
+      )}
+
+      {/* Election Winner Reveal Animation */}
+      {showReveal && revealType === 'election' && electionReveal && (
+        <ElectionWinnerReveal
+          revealData={electionReveal}
+          onComplete={() => {
+            setShowReveal(false)
+            setElectionReveal(null)
           }}
         />
       )}

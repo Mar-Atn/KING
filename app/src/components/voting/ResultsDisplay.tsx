@@ -1,15 +1,14 @@
 /**
  * ResultsDisplay Component
  *
- * Displays vote results with animations and analytics.
- * Shows winner, vote tallies, and individual votes (if transparency allows).
+ * Displays vote results in Mediterranean style without modern icons.
+ * Shows winner, vote tallies using clean text-based design.
  *
  * Sprint 1: Voting System Implementation
- * Date: October 29, 2025
+ * Updated: October 29, 2025 - Mediterranean style
  */
 
 import { useState, useEffect } from 'react'
-import { X, Crown, TrendingUp, Users, AlertCircle } from 'lucide-react'
 import { useVoting } from '../../hooks/useVoting'
 
 interface ResultsDisplayProps {
@@ -43,35 +42,30 @@ export function ResultsDisplay({ sessionId, onClose }: ResultsDisplayProps) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border-4 border-amber-600">
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-amber-600 to-amber-700 p-6 text-white flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold">Vote Results</h2>
-            <p className="text-amber-100">
+        <div className="sticky top-0 bg-gradient-to-br from-amber-50 to-orange-50 border-b-4 border-amber-600 p-6">
+          <div className="text-center">
+            <h2 className="text-3xl font-heading font-bold text-amber-900 mb-2">Vote Results</h2>
+            <p className="text-lg text-amber-800">
               {currentSession.proposal_title || 'Voting Results'}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-white hover:text-gray-200 transition-colors"
+            className="absolute top-4 right-4 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium"
           >
-            <X className="w-6 h-6" />
+            Close
           </button>
         </div>
 
         {/* Override Notice */}
         {hasOverride && (
-          <div className="mx-6 mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <div className="font-semibold text-blue-900">Manual Override Applied</div>
-                <div className="text-blue-700 mt-1">{hasOverride.reason}</div>
-                <div className="text-blue-600 text-xs mt-1">
-                  Override by facilitator on {new Date(hasOverride.overridden_at).toLocaleString()}
-                </div>
-              </div>
+          <div className="mx-6 mt-6 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg">
+            <div className="font-heading font-bold text-amber-900 mb-2">⚠️ Manual Override Applied</div>
+            <div className="text-amber-800 mb-2">{hasOverride.reason}</div>
+            <div className="text-sm text-amber-700">
+              Override by facilitator on {new Date(hasOverride.overridden_at).toLocaleString()}
             </div>
           </div>
         )}
@@ -119,40 +113,37 @@ function ChoosePersonResults({ resultsData, hasOverride, threshold }: ChoosePers
     <div className="space-y-6">
       {/* Winner Card */}
       {winner && !tie ? (
-        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-xl p-8 text-center">
-          <div className="w-20 h-20 bg-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Crown className="w-10 h-10 text-white" />
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-4 border-amber-400 rounded-xl p-8 text-center">
+          <div className="mb-4">
+            <div className="text-6xl mb-2">👑</div>
           </div>
 
-          <h3 className="text-3xl font-bold text-gray-900 mb-2">{winner.name}</h3>
-          <p className="text-xl text-amber-700 font-semibold">
+          <h3 className="text-4xl font-heading font-bold text-amber-900 mb-3">{winner.name}</h3>
+          <p className="text-2xl text-amber-800 font-semibold mb-4">
             {winner.vote_count} votes ({winner.percentage}%)
           </p>
 
           {winner.percentage >= threshold ? (
-            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-              <Crown className="w-4 h-4" />
+            <div className="mt-4 inline-block px-6 py-3 bg-amber-700 text-white rounded-lg text-lg font-medium">
               Threshold Met ({threshold}%)
             </div>
           ) : (
-            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 rounded-full text-sm font-medium">
-              <AlertCircle className="w-4 h-4" />
+            <div className="mt-4 inline-block px-6 py-3 bg-orange-600 text-white rounded-lg text-lg font-medium">
               Below Threshold ({threshold}% needed)
             </div>
           )}
         </div>
       ) : tie ? (
-        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-8 text-center">
-          <div className="text-6xl mb-4">🤝</div>
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">Tie - No Winner</h3>
-          <p className="text-red-700">Multiple candidates received equal votes. No one is nominated.</p>
+        <div className="bg-amber-50 border-4 border-amber-400 rounded-xl p-8 text-center">
+          <div className="text-6xl mb-4">⚖️</div>
+          <h3 className="text-3xl font-heading font-bold text-amber-900 mb-3">Tie - No Winner</h3>
+          <p className="text-lg text-amber-800">Multiple candidates received equal votes. No one is nominated.</p>
         </div>
       ) : null}
 
       {/* All Candidates */}
       <div>
-        <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5" />
+        <h4 className="text-xl font-heading font-bold text-amber-900 mb-4">
           Vote Breakdown ({totalVotes} total votes)
         </h4>
 
@@ -160,33 +151,33 @@ function ChoosePersonResults({ resultsData, hasOverride, threshold }: ChoosePers
           {candidates.map((candidate: any, index: number) => (
             <div
               key={candidate.role_id || index}
-              className="bg-white border border-gray-200 rounded-lg p-4"
+              className={`rounded-lg p-5 border-2 ${
+                index === 0 && !tie
+                  ? 'bg-amber-50 border-amber-400'
+                  : 'bg-white border-neutral-200'
+              }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  {index === 0 && !tie && (
-                    <Crown className="w-5 h-5 text-amber-500" />
-                  )}
-                  <span className="font-semibold text-gray-900">{candidate.name}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    {index === 0 && !tie && <span className="text-xl">👑</span>}
+                    <span className={`text-lg font-semibold ${
+                      index === 0 && !tie ? 'text-amber-900' : 'text-neutral-900'
+                    }`}>
+                      {candidate.name}
+                    </span>
+                  </div>
+                  <div className={`text-sm ${
+                    index === 0 && !tie ? 'text-amber-700' : 'text-neutral-600'
+                  }`}>
+                    {candidate.percentage}% of votes
+                  </div>
                 </div>
-                <span className="text-lg font-bold text-gray-900">
-                  {candidate.vote_count} votes
-                </span>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="relative">
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className={`h-3 rounded-full transition-all duration-1000 ${
-                      index === 0 && !tie ? 'bg-amber-500' : 'bg-gray-400'
-                    }`}
-                    style={{ width: `${candidate.percentage}%` }}
-                  />
+                <div className={`text-2xl font-bold ${
+                  index === 0 && !tie ? 'text-amber-900' : 'text-neutral-900'
+                }`}>
+                  {candidate.vote_count}
                 </div>
-                <span className="absolute right-2 top-0 text-xs font-medium text-gray-700">
-                  {candidate.percentage}%
-                </span>
               </div>
             </div>
           ))}
@@ -219,98 +210,72 @@ function YesNoResults({ resultsData, hasOverride }: YesNoResultsProps) {
   return (
     <div className="space-y-6">
       {/* Result Card */}
-      <div className={`${passed ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'} border-2 rounded-xl p-8 text-center`}>
+      <div className={`${passed ? 'bg-amber-50 border-amber-600' : 'bg-orange-50 border-orange-600'} border-4 rounded-xl p-8 text-center`}>
         <div className="text-6xl mb-4">
-          {passed ? '✅' : '❌'}
+          {passed ? '📜' : '⚠️'}
         </div>
 
-        <h3 className="text-3xl font-bold text-gray-900 mb-2">
+        <h3 className="text-4xl font-heading font-bold text-neutral-900 mb-3">
           {passed ? 'Passed' : 'Failed'}
         </h3>
 
-        <p className={`text-xl font-semibold ${passed ? 'text-green-700' : 'text-red-700'}`}>
+        <p className={`text-2xl font-semibold ${passed ? 'text-amber-800' : 'text-orange-800'}`}>
           {yes} Yes vs {no} No
         </p>
       </div>
 
       {/* Vote Breakdown */}
       <div>
-        <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5" />
+        <h4 className="text-xl font-heading font-bold text-amber-900 mb-4">
           Vote Breakdown ({total} total votes)
         </h4>
 
         <div className="space-y-4">
           {/* Yes */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                  <span className="text-green-600 font-bold">✓</span>
+          <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg font-semibold text-neutral-900">Yes</span>
                 </div>
-                <span className="font-semibold text-gray-900">Yes</span>
+                <div className="text-sm text-amber-700">
+                  {yesPercentage}% of votes
+                </div>
               </div>
-              <span className="text-lg font-bold text-gray-900">{yes} votes</span>
-            </div>
-            <div className="relative">
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="h-3 rounded-full bg-green-500 transition-all duration-1000"
-                  style={{ width: `${yesPercentage}%` }}
-                />
-              </div>
-              <span className="absolute right-2 top-0 text-xs font-medium text-gray-700">
-                {yesPercentage}%
-              </span>
+              <div className="text-2xl font-bold text-neutral-900">{yes}</div>
             </div>
           </div>
 
           {/* No */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                  <span className="text-red-600 font-bold">✗</span>
+          <div className="bg-amber-50 border-2 border-amber-600 rounded-lg p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">❌</span>
+                  <span className="text-lg font-semibold text-neutral-900">No</span>
                 </div>
-                <span className="font-semibold text-gray-900">No</span>
+                <div className="text-sm text-amber-700">
+                  {noPercentage}% of votes
+                </div>
               </div>
-              <span className="text-lg font-bold text-gray-900">{no} votes</span>
-            </div>
-            <div className="relative">
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="h-3 rounded-full bg-red-500 transition-all duration-1000"
-                  style={{ width: `${noPercentage}%` }}
-                />
-              </div>
-              <span className="absolute right-2 top-0 text-xs font-medium text-gray-700">
-                {noPercentage}%
-              </span>
+              <div className="text-2xl font-bold text-neutral-900">{no}</div>
             </div>
           </div>
 
           {/* Abstain */}
           {abstain > 0 && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                    <span className="text-gray-600">🤷</span>
+            <div className="bg-neutral-50 border-2 border-neutral-300 rounded-lg p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xl">⚪</span>
+                    <span className="text-lg font-semibold text-neutral-900">Abstain</span>
                   </div>
-                  <span className="font-semibold text-gray-900">Abstain</span>
+                  <div className="text-sm text-neutral-600">
+                    {abstainPercentage}% of votes
+                  </div>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{abstain} votes</span>
-              </div>
-              <div className="relative">
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="h-3 rounded-full bg-gray-400 transition-all duration-1000"
-                    style={{ width: `${abstainPercentage}%` }}
-                  />
-                </div>
-                <span className="absolute right-2 top-0 text-xs font-medium text-gray-700">
-                  {abstainPercentage}%
-                </span>
+                <div className="text-2xl font-bold text-neutral-900">{abstain}</div>
               </div>
             </div>
           )}

@@ -53,13 +53,26 @@ export function useVoting(options: UseVotingOptions = {}) {
       setLoading(true)
       setError(null)
 
+      console.log('Creating vote session with data:', sessionData)
+
       const { data, error: createError } = await supabase
         .from('vote_sessions')
         .insert(sessionData)
         .select()
         .single()
 
-      if (createError) throw createError
+      if (createError) {
+        console.error('❌ Database error creating session:', {
+          message: createError.message,
+          details: createError.details,
+          hint: createError.hint,
+          code: createError.code,
+          sessionData
+        })
+        throw createError
+      }
+
+      console.log('✅ Session created successfully:', data)
 
       // Refresh sessions list
       if (runId) {
@@ -70,7 +83,7 @@ export function useVoting(options: UseVotingOptions = {}) {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create vote session'
       setError(message)
-      console.error('Error creating vote session:', err)
+      console.error('❌ Create session error:', err)
       return null
     } finally {
       setLoading(false)
@@ -616,6 +629,7 @@ export function useVoting(options: UseVotingOptions = {}) {
     fetchSessions()
 
     // Subscribe to vote session changes
+    console.log('📡 Setting up vote_sessions subscription for run:', runId)
     const sessionChannel = supabase
       .channel(`vote_sessions_${runId}`)
       .on(
@@ -626,12 +640,14 @@ export function useVoting(options: UseVotingOptions = {}) {
           table: 'vote_sessions',
           filter: `run_id=eq.${runId}`
         },
-        () => {
-          console.log('🔔 Vote session changed, refreshing...')
+        (payload) => {
+          console.log('🔔 Vote session changed!', payload)
           fetchSessions()
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 Vote sessions subscription status:', status)
+      })
 
     // Subscribe to votes table for real-time vote count updates
     const votesChannel = supabase
