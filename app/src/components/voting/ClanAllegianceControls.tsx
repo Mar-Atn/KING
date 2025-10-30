@@ -345,7 +345,7 @@ export function ClanAllegianceControls({ runId, clans, roles }: ClanAllegianceCo
 
       {/* Clan Voting Status with Individual Roles */}
       <div className="space-y-6">
-        {clans.map(clan => {
+        {clans.filter(clan => getClanRoles(clan.clan_id).length > 0).map(clan => {
           const clanRoles = getClanRoles(clan.clan_id)
           const clanVotes = getClanVotes(clan.clan_id)
           const totalRoles = clanRoles.length
