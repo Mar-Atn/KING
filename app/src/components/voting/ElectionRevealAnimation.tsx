@@ -489,15 +489,15 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
     }
   }, [targetId])
 
-  // Start from center of screen
-  const startX = window.innerWidth / 2
-  const startY = window.innerHeight / 2
+  // Start from top-right area near "Vote Results"
+  const startX = window.innerWidth - 200 // Right side with margin
+  const startY = 120 // Below header
 
   const hasVoterInfo = coin.voterRole && coin.chosenRole
 
   return (
     <>
-      {/* Coin */}
+      {/* Large Coin with voter's face - stays visible throughout flight */}
       <motion.div
         initial={{
           x: startX,
@@ -509,64 +509,54 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
         animate={{
           x: targetPosition.x,
           y: targetPosition.y,
-          scale: [0, 1.5, 1],
-          opacity: [0, 1, 1, 0],
+          scale: [0, 1.8, 1],
+          opacity: [0, 1, 1, 1, 0],
           rotate: 720
         }}
         transition={{
           duration: 1.8,
           ease: 'easeInOut'
         }}
-        className="fixed w-24 h-24 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 border-3 border-amber-300 shadow-2xl flex items-center justify-center pointer-events-none"
+        className="fixed w-32 h-32 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 border-4 border-amber-300 shadow-2xl flex items-center justify-center pointer-events-none"
         style={{
-          boxShadow: '0 4px 8px rgba(0,0,0,0.4), inset 0 2px 2px rgba(255,255,255,0.4)',
+          boxShadow: '0 8px 16px rgba(0,0,0,0.6), inset 0 4px 4px rgba(255,255,255,0.5)',
           zIndex: 100
         }}
       >
         {hasVoterInfo && coin.voterRole?.avatar_url ? (
-          <motion.img
+          <img
             src={coin.voterRole.avatar_url}
             alt={coin.voterRole.name}
-            className="w-20 h-20 rounded-full object-cover"
-            initial={{ opacity: 1 }}
-            animate={{ opacity: [1, 1, 0] }}
-            transition={{ duration: 1.8, times: [0, 0.3, 1] }}
+            className="w-28 h-28 rounded-full object-cover"
           />
         ) : (
-          <span className="text-3xl font-bold text-amber-900">⚜</span>
+          <span className="text-4xl font-bold text-amber-900">⚜</span>
         )}
       </motion.div>
 
-      {/* Vote announcement text (appears at center, fades out) */}
+      {/* Vote announcement text - positioned below progress bar, center screen */}
       {hasVoterInfo && (
         <motion.div
-          initial={{
-            x: startX - 150,
-            y: startY + 120,
-            opacity: 0
-          }}
-          animate={{
-            opacity: [0, 1, 1, 0],
-            y: [startY + 120, startY + 100, startY + 100, startY + 80]
-          }}
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: [0, 1, 1, 0] }}
           transition={{
             duration: 1.8,
             ease: 'easeOut'
           }}
-          className="fixed pointer-events-none"
+          className="fixed top-40 left-1/2 transform -translate-x-1/2 pointer-events-none"
           style={{ zIndex: 101 }}
         >
-          <div className="bg-neutral-800 bg-opacity-90 border-2 border-amber-600 rounded-lg px-5 py-3 shadow-xl">
-            <div className="text-white text-lg font-semibold text-center whitespace-nowrap">
+          <div className="bg-neutral-800 bg-opacity-95 border-3 border-amber-500 rounded-xl px-8 py-5 shadow-2xl">
+            <div className="text-white text-2xl font-bold text-center">
               <span style={{ color: coin.voterClan?.color_hex || '#B8860B' }}>
                 {coin.voterRole?.name}
               </span>
               {coin.voterClan && (
-                <span className="text-neutral-400"> of {coin.voterClan.name}</span>
+                <span className="text-neutral-300"> of {coin.voterClan.name}</span>
               )}
               <br />
-              <span className="text-amber-400">voted for </span>
-              <span className="text-white">{coin.chosenRole?.name}</span>
+              <span className="text-amber-400">has given his voice to </span>
+              <span className="text-amber-200 font-extrabold">{coin.chosenRole?.name}</span>
             </div>
           </div>
         </motion.div>
