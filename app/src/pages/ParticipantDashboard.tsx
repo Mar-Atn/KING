@@ -21,6 +21,7 @@ import { Clock } from 'lucide-react'
 import { ResultsDisplay } from '../components/voting/ResultsDisplay'
 import { ClanNominationsReveal } from '../components/voting/ClanNominationsReveal'
 import { ElectionWinnerReveal } from '../components/voting/ElectionWinnerReveal'
+import { ElectionRevealAnimation } from '../components/voting/ElectionRevealAnimation'
 import { useVoting } from '../hooks/useVoting'
 import type { Role, Clan, Phase, SimRun, VoteResult } from '../types/database'
 
@@ -83,7 +84,7 @@ export function ParticipantDashboard() {
 
   // Reveal state
   const [showReveal, setShowReveal] = useState(false)
-  const [revealType, setRevealType] = useState<'clan_nomination' | 'election'>('clan_nomination')
+  const [revealType, setRevealType] = useState<'clan_nomination' | 'election' | 'election_sequential'>('clan_nomination')
   const [reveals, setReveals] = useState<Array<{
     clan: Clan
     nominee: Role
@@ -98,6 +99,12 @@ export function ParticipantDashboard() {
     roundNumber: 1 | 2
     thresholdMet: boolean
     topCandidates?: { role: Role; voteCount: number }[]
+  } | null>(null)
+  const [electionSequentialData, setElectionSequentialData] = useState<{
+    session: any
+    result: VoteResult
+    candidates: Role[]
+    threshold: number
   } | null>(null)
 
   // Load all data (run only once on mount)
@@ -475,8 +482,8 @@ export function ParticipantDashboard() {
       const firstSession = announcedSessions[0]
 
       if (firstSession.scope === 'all') {
-        // Election reveal (Vote 1 or Vote 2)
-        console.log('🏛️ [Reveal Detection] Election reveal detected')
+        // Election reveal (Vote 1 or Vote 2) - Sequential Animation
+        console.log('🏛️ [Reveal Detection] Election reveal detected - using sequential animation')
 
         const session = firstSession
 
@@ -501,43 +508,26 @@ export function ParticipantDashboard() {
           return
         }
 
-        // Determine round number from phase name
-        const roundNumber = (session.proposal_title === 'Vote 1' ? 1 : 2) as 1 | 2
-        const thresholdMet = resultsData.threshold_met || false
+        // Get candidates from eligible_candidates in session
+        const candidateIds = (session.eligible_candidates as string[]) || []
+        const candidates = allRoles.filter(r => candidateIds.includes(r.role_id))
 
-        let winner: Role | null = null
-        let winnerClan: Clan | null = null
-        let topCandidates: { role: Role; voteCount: number }[] | undefined
+        // Get threshold from results_data
+        const threshold = resultsData.threshold_required || Math.ceil(allRoles.filter(r => r.participant_type === 'human').length * 2 / 3)
 
-        if (thresholdMet && resultsData.winner) {
-          // Winner found
-          winner = allRoles.find(r => r.role_id === resultsData.winner.role_id) || null
-          if (winner) {
-            winnerClan = allClans.find(c => c.clan_id === winner.clan_id) || null
-          }
-        } else {
-          // No threshold met - get top candidates for runoff from all_candidates
-          const allCandidates = resultsData.all_candidates as Array<{ role_id: string; vote_count: number }>
-          const sorted = allCandidates
-            .sort((a, b) => b.vote_count - a.vote_count)
-            .slice(0, 2)
+        console.log('📊 Election reveal data:', {
+          candidatesCount: candidates.length,
+          threshold,
+          totalVotes: resultsData.total_votes
+        })
 
-          topCandidates = sorted.map(candidate => {
-            const role = allRoles.find(r => r.role_id === candidate.role_id)!
-            return { role, voteCount: candidate.vote_count }
-          }).filter(tc => tc.role)
-        }
-
-        setElectionReveal({
+        setElectionSequentialData({
           session,
           result: resultData,
-          winner,
-          clan: winnerClan,
-          roundNumber,
-          thresholdMet,
-          topCandidates
+          candidates,
+          threshold
         })
-        setRevealType('election')
+        setRevealType('election_sequential')
         setShowReveal(true)
         localStorage.setItem(seenKey, 'true')
 
@@ -1519,13 +1509,29 @@ export function ParticipantDashboard() {
         />
       )}
 
-      {/* Election Winner Reveal Animation */}
+      {/* Election Winner Reveal Animation (Legacy - for backward compatibility) */}
       {showReveal && revealType === 'election' && electionReveal && (
         <ElectionWinnerReveal
           revealData={electionReveal}
           onComplete={() => {
             setShowReveal(false)
             setElectionReveal(null)
+          }}
+        />
+      )}
+
+      {/* Election Sequential Reveal Animation (New cinematic version) */}
+      {showReveal && revealType === 'election_sequential' && electionSequentialData && (
+        <ElectionRevealAnimation
+          session={electionSequentialData.session}
+          result={electionSequentialData.result}
+          candidates={electionSequentialData.candidates}
+          allRoles={allRoles}
+          clans={allClans}
+          threshold={electionSequentialData.threshold}
+          onComplete={() => {
+            setShowReveal(false)
+            setElectionSequentialData(null)
           }}
         />
       )}

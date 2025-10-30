@@ -671,6 +671,8 @@ export function FacilitatorSimulation() {
                     : simulation.vote_2_threshold || Math.ceil((simulation.total_participants || 12) * 2 / 3)
                 }
                 candidates={electionCandidates}
+                allRoles={roles}
+                clans={clans}
               />
             ) : null}
 

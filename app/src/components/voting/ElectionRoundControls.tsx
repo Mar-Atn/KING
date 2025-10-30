@@ -85,7 +85,7 @@ export function ElectionRoundControls({
           scope: 'all' as const,
           scope_clan_id: null,
           eligible_candidates: candidates.map(c => c.role_id),
-          transparency_level: 'secret' as const,
+          transparency_level: 'open' as const,
           status: 'open' as const,
           started_at: null
         }
@@ -193,7 +193,7 @@ export function ElectionRoundControls({
       scope: 'all' as const,
       scope_clan_id: null,
       eligible_candidates: candidates.map(c => c.role_id),
-      transparency_level: 'secret' as const,
+      transparency_level: 'open' as const,
       status: 'open' as const,
       started_at: null
     }
@@ -371,6 +371,22 @@ export function ElectionRoundControls({
     const winner = sortedCandidates[0]
     const thresholdMet = winner && winner.count >= threshold
 
+    // Determine runoff candidates (all tied for top positions)
+    let runoffCandidates: { roleId: string; count: number }[] = []
+    if (!thresholdMet && sortedCandidates.length > 1) {
+      const topVoteCount = sortedCandidates[0].count
+      // Include all candidates with the top vote count
+      runoffCandidates = sortedCandidates.filter(c => c.count === topVoteCount)
+
+      // If multiple tied for first, include them all
+      // If only one first place, check for ties in second place
+      if (runoffCandidates.length === 1 && sortedCandidates.length > 1) {
+        const secondPlaceCount = sortedCandidates[1].count
+        const secondPlaceCandidates = sortedCandidates.filter(c => c.count === secondPlaceCount)
+        runoffCandidates = [...runoffCandidates, ...secondPlaceCandidates]
+      }
+    }
+
     // Build all_candidates array with candidate details
     const allCandidates = sortedCandidates.map(({ roleId, count }) => {
       const candidate = candidates.find(c => c.role_id === roleId)
@@ -390,9 +406,15 @@ export function ElectionRoundControls({
         vote_count: winner.count,
         percentage: totalVotes > 0 ? Math.round((winner.count / totalVotes) * 100) : 0
       } : null,
+      runoff_candidates: runoffCandidates.map(({ roleId, count }) => ({
+        role_id: roleId,
+        name: candidates.find(c => c.role_id === roleId)?.name || 'Unknown',
+        vote_count: count,
+        percentage: totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0
+      })),
       all_candidates: allCandidates,
       total_votes: totalVotes,
-      tie: false,
+      tie: runoffCandidates.length > 2,
       threshold_met: thresholdMet,
       threshold_required: threshold
     }
