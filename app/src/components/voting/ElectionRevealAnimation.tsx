@@ -209,8 +209,13 @@ export function ElectionRevealAnimation({
           </div>
         )}
 
+        {/* Spacer for announcement text (reserve space between header and candidates) */}
+        {!showFinalAnnouncement && (
+          <div className="h-24 mb-6"></div>
+        )}
+
         {/* Candidates with Coin Stacks */}
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center mt-8">
           <div className="flex flex-wrap justify-center gap-8 max-w-6xl">
             {candidates.map((candidate, index) => {
               const clan = clans.find(c => c.clan_id === candidate.clan_id)
@@ -489,15 +494,15 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
     }
   }, [targetId])
 
-  // Start from top-right area near "Vote Results"
-  const startX = window.innerWidth - 200 // Right side with margin
-  const startY = 120 // Below header
+  // Start from OFF-SCREEN upper right corner
+  const startX = window.innerWidth + 100 // Completely off-screen to the right
+  const startY = 160 // Upper area of screen
 
   const hasVoterInfo = coin.voterRole && coin.chosenRole
 
   return (
     <>
-      {/* Large Coin with voter's face - stays visible throughout flight */}
+      {/* Large Coin with voter's face - emerges from off-screen */}
       <motion.div
         initial={{
           x: startX,
@@ -534,7 +539,7 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
         )}
       </motion.div>
 
-      {/* Vote announcement text - positioned below progress bar, center screen */}
+      {/* Vote announcement text - positioned in reserved space between header and candidates */}
       {hasVoterInfo && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -543,7 +548,7 @@ function AnimatingCoin({ targetId, coin }: { targetId: string, coin: CoinAnimati
             duration: 1.8,
             ease: 'easeOut'
           }}
-          className="fixed top-40 left-1/2 transform -translate-x-1/2 pointer-events-none"
+          className="fixed top-48 left-1/2 transform -translate-x-1/2 pointer-events-none"
           style={{ zIndex: 101 }}
         >
           <div className="bg-neutral-800 bg-opacity-95 border-3 border-amber-500 rounded-xl px-8 py-5 shadow-2xl">
