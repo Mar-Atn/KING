@@ -23,7 +23,9 @@ import { ClanNominationsReveal } from '../components/voting/ClanNominationsRevea
 import { ElectionWinnerReveal } from '../components/voting/ElectionWinnerReveal'
 import { ElectionRevealAnimation } from '../components/voting/ElectionRevealAnimation'
 import { useVoting } from '../hooks/useVoting'
-import type { Role, Clan, Phase, SimRun, VoteResult } from '../types/database'
+import { KingDecisionForm } from '../components/decisions/KingDecisionForm'
+import { KingDecisionReveal } from '../components/decisions/KingDecisionReveal'
+import type { Role, Clan, Phase, SimRun, VoteResult, KingDecision } from '../types/database'
 
 type Tab = 'role' | 'clan' | 'process' | 'materials'
 
@@ -106,6 +108,11 @@ export function ParticipantDashboard() {
     candidates: Role[]
     threshold: number
   } | null>(null)
+
+  // King decision state
+  const [isKing, setIsKing] = useState(false)
+  const [kingDecision, setKingDecision] = useState<KingDecision | null>(null)
+  const [showKingDecisionReveal, setShowKingDecisionReveal] = useState(false)
 
   // Load all data (run only once on mount)
   useEffect(() => {
@@ -604,6 +611,103 @@ export function ParticipantDashboard() {
 
     fetchAnnouncedResults()
   }, [sessions, role, allClans, allRoles, runId])
+
+  // Check if current user is the elected King (from Vote 2 results)
+  useEffect(() => {
+    if (!role || !runId) return
+
+    const checkIfKing = async () => {
+      // Find Vote 2 results (final King election)
+      const { data: vote2Results, error } = await supabase
+        .from('vote_results')
+        .select('*, vote_sessions!inner(*)')
+        .eq('vote_sessions.run_id', runId)
+        .ilike('vote_sessions.proposal_title', '%vote 2%')
+        .single()
+
+      if (error || !vote2Results) {
+        setIsKing(false)
+        return
+      }
+
+      const resultsData = vote2Results.results_data as any
+      const winner = resultsData?.winner
+
+      if (winner && winner.role_id === role.role_id) {
+        console.log('👑 Current user is the elected King!')
+        setIsKing(true)
+      } else {
+        setIsKing(false)
+      }
+    }
+
+    checkIfKing()
+  }, [role, runId])
+
+  // Subscribe to King decisions (for reveals)
+  useEffect(() => {
+    if (!runId) return
+
+    const loadKingDecision = async () => {
+      const { data, error } = await supabase
+        .from('king_decisions')
+        .select('*')
+        .eq('run_id', runId)
+        .single()
+
+      if (!error && data) {
+        setKingDecision(data)
+
+        // Auto-show reveal if decision is revealed and user hasn't seen it yet
+        if (data.revealed) {
+          const revealKey = `king_decision_reveal_${runId}`
+          const hasSeenReveal = localStorage.getItem(revealKey)
+
+          if (!hasSeenReveal) {
+            setShowKingDecisionReveal(true)
+            localStorage.setItem(revealKey, 'true')
+          }
+        }
+      }
+    }
+
+    loadKingDecision()
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel(`king_decisions:${runId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'king_decisions',
+          filter: `run_id=eq.${runId}`
+        },
+        (payload) => {
+          console.log('👑 King decision update:', payload)
+          const decision = payload.new as KingDecision
+
+          setKingDecision(decision)
+
+          // Auto-show reveal if just revealed
+          if (decision.revealed) {
+            const revealKey = `king_decision_reveal_${runId}`
+            const hasSeenReveal = localStorage.getItem(revealKey)
+
+            if (!hasSeenReveal) {
+              setShowKingDecisionReveal(true)
+              localStorage.setItem(revealKey, 'true')
+            }
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [runId])
 
   // Show loading screen while auth is loading (prevents premature redirects)
   if (authLoading) {
