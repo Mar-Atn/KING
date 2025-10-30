@@ -712,8 +712,8 @@ export function FacilitatorSimulation() {
               </div>
             )}
 
-            {/* King's Decisions Review - Show when King is elected */}
-            {kingRole && (
+            {/* King's Decisions Review - Show only during King's Decision phase */}
+            {kingRole && currentPhase && currentPhase.name.toLowerCase().includes('king') && currentPhase.name.toLowerCase().includes('decision') && (
               <div className="mb-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-6">
                 <h2 className="text-2xl font-heading font-bold text-amber-900 mb-6">
                   King's Decisions

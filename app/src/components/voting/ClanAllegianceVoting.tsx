@@ -13,10 +13,11 @@ import type { Clan, ClanVote } from '../../types/database'
 interface ClanAllegianceVotingProps {
   runId: string
   userClan: Clan
+  votingStarted: boolean
   onVoteSuccess: () => void
 }
 
-export function ClanAllegianceVoting({ runId, userClan, onVoteSuccess }: ClanAllegianceVotingProps) {
+export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuccess }: ClanAllegianceVotingProps) {
   const [loading, setLoading] = useState(false)
   const [existingVote, setExistingVote] = useState<ClanVote | null>(null)
   const [oathVote, setOathVote] = useState<boolean | null>(null)
@@ -46,6 +47,26 @@ export function ClanAllegianceVoting({ runId, userClan, onVoteSuccess }: ClanAll
       supabase.removeChannel(channel)
     }
   }, [runId, userClan.clan_id])
+
+  // Show "waiting for voting to start" message if voting hasn't begun
+  if (!votingStarted && !existingVote) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-8 text-center">
+          <div className="text-6xl mb-4">⏳</div>
+          <h2 className="text-4xl font-heading font-bold text-amber-900 mb-4">
+            Awaiting Facilitator
+          </h2>
+          <p className="text-xl text-amber-800 mb-2" style={{ color: userClan.color_hex }}>
+            {userClan.name}
+          </p>
+          <p className="text-amber-700">
+            Voting will begin soon. Please wait for the facilitator to start the final clan allegiance vote.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const loadExistingVote = async () => {
     const { data, error } = await supabase

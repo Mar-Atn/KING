@@ -16,10 +16,13 @@ interface ClanAllegianceControlsProps {
 export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsProps) {
   const [loading, setLoading] = useState(true)
   const [revealing, setRevealing] = useState(false)
+  const [starting, setStarting] = useState(false)
   const [votes, setVotes] = useState<ClanVote[]>([])
   const [revealed, setRevealed] = useState(false)
+  const [votingStarted, setVotingStarted] = useState(false)
 
   useEffect(() => {
+    loadVotingState()
     loadVotes()
 
     // Subscribe to real-time updates
@@ -45,6 +48,18 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     }
   }, [runId])
 
+  const loadVotingState = async () => {
+    const { data, error } = await supabase
+      .from('sim_runs')
+      .select('clan_allegiance_voting_started_at')
+      .eq('run_id', runId)
+      .single()
+
+    if (!error && data) {
+      setVotingStarted(!!data.clan_allegiance_voting_started_at)
+    }
+  }
+
   const loadVotes = async () => {
     setLoading(true)
 
@@ -62,6 +77,28 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     }
 
     setLoading(false)
+  }
+
+  const handleStartVoting = async () => {
+    setStarting(true)
+
+    const { error } = await supabase
+      .from('sim_runs')
+      .update({
+        clan_allegiance_voting_started_at: new Date().toISOString()
+      })
+      .eq('run_id', runId)
+
+    setStarting(false)
+
+    if (error) {
+      console.error('Error starting voting:', error)
+      alert('Failed to start voting: ' + error.message)
+      return
+    }
+
+    setVotingStarted(true)
+    alert('✅ Clan allegiance voting has started! All clans can now vote.')
   }
 
   const handleReveal = async () => {
@@ -102,6 +139,32 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     return (
       <div className="bg-amber-50 border-4 border-amber-400 rounded-xl p-8 text-center">
         <div className="text-amber-700">Loading clan votes...</div>
+      </div>
+    )
+  }
+
+  // Show "Start Voting" button if voting hasn't started yet
+  if (!votingStarted) {
+    return (
+      <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-8">
+        <div className="text-center">
+          <h3 className="text-3xl font-heading font-bold text-amber-900 mb-4">
+            Final Clan Allegiance Voting
+          </h3>
+          <p className="text-xl text-amber-800 mb-6">
+            Each clan will vote on their allegiance to the King and potential actions
+          </p>
+          <button
+            onClick={handleStartVoting}
+            disabled={starting}
+            className="px-8 py-4 bg-amber-600 text-white text-xl font-heading font-bold rounded-lg hover:bg-amber-700 disabled:bg-amber-300 transition-colors shadow-lg"
+          >
+            {starting ? 'Starting...' : '▶️ Start Voting'}
+          </button>
+          <div className="mt-6 text-amber-700 text-sm">
+            When you start voting, all {clans.length} clans will be able to cast their votes
+          </div>
+        </div>
       </div>
     )
   }

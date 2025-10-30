@@ -119,6 +119,7 @@ export function ParticipantDashboard() {
   // Clan allegiance state
   const [clanVotes, setClanVotes] = useState<ClanVote[]>([])
   const [showClanAllegianceReveal, setShowClanAllegianceReveal] = useState(false)
+  const [clanAllegianceVotingStarted, setClanAllegianceVotingStarted] = useState(false)
 
   // Load all data (run only once on mount)
   useEffect(() => {
@@ -166,7 +167,7 @@ export function ParticipantDashboard() {
         const simStart = Date.now()
         const simPromise = supabase
           .from('sim_runs')
-          .select('run_id, run_name, version, status, created_at, started_at, completed_at, facilitator_id, current_phase_id, total_participants, human_participants, ai_participants, notes')
+          .select('run_id, run_name, version, status, created_at, started_at, completed_at, facilitator_id, current_phase_id, total_participants, human_participants, ai_participants, notes, clan_allegiance_voting_started_at')
           .eq('run_id', runId)
           .single()
           .then(r => { console.log(`      sim_runs: ${Date.now() - simStart}ms`); return r })
@@ -215,6 +216,9 @@ export function ParticipantDashboard() {
         setAllClans(clansResult.data || [])
         setAllRoles(allRolesResult.data || [])
         setPhases(phasesResult.data || [])
+
+        // Set clan allegiance voting state
+        setClanAllegianceVotingStarted(!!simResult.data?.clan_allegiance_voting_started_at)
 
         // Load phaseStore for timer (same as admin)
         if (runId) {
@@ -358,6 +362,9 @@ export function ParticipantDashboard() {
           previousPhaseIdRef.current = newPhaseId
 
           setSimulation(newSimData)
+
+          // Update clan allegiance voting state if it changed
+          setClanAllegianceVotingStarted(!!(newSimData as any).clan_allegiance_voting_started_at)
         }
       )
       .subscribe()
@@ -1177,6 +1184,7 @@ export function ParticipantDashboard() {
             <ClanAllegianceVoting
               runId={runId!}
               userClan={clanData}
+              votingStarted={clanAllegianceVotingStarted}
               onVoteSuccess={() => {
                 // Success handled in component
               }}
