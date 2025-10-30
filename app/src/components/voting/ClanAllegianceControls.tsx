@@ -31,6 +31,9 @@ export function ClanAllegianceControls({ runId, clans, roles }: ClanAllegianceCo
     loadVotingState()
     loadVotes()
 
+    // Debounce timer to prevent excessive re-renders
+    let debounceTimer: NodeJS.Timeout | null = null
+
     // Subscribe to real-time updates
     const channel = supabase
       .channel(`clan_votes_admin:${runId}`)
@@ -44,12 +47,18 @@ export function ClanAllegianceControls({ runId, clans, roles }: ClanAllegianceCo
         },
         () => {
           console.log('📊 Clan vote update')
-          loadVotes()
+
+          // Debounce: only reload after 500ms of no updates
+          if (debounceTimer) clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => {
+            loadVotes()
+          }, 500)
         }
       )
       .subscribe()
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
       supabase.removeChannel(channel)
     }
   }, [runId])
