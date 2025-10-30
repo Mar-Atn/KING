@@ -87,7 +87,7 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, clans, onSubmitS
     other_decisions: ''
   })
 
-  // Load existing decision if any
+  // Load existing decision if any with real-time updates
   useEffect(() => {
     const loadExistingDecision = async () => {
       const { data, error } = await supabase
@@ -122,7 +122,30 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, clans, onSubmitS
       }
     }
 
+    // Load on mount
     loadExistingDecision()
+
+    // Subscribe to real-time updates (for when King submits or admin reveals)
+    const channel = supabase
+      .channel(`king_decisions:${runId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'king_decisions',
+          filter: `run_id=eq.${runId}`
+        },
+        (payload) => {
+          console.log('👑 King decision update in form:', payload)
+          loadExistingDecision() // Reload to update status
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [runId, kingRoleId])
 
   const handleWarDeclarationToggle = (target: string) => {
@@ -209,6 +232,32 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, clans, onSubmitS
   const getClanName = (role: Role): string => {
     const clan = clans.find(c => c.clan_id === role.clan_id)
     return clan ? clan.name : 'Unknown Clan'
+  }
+
+  // If decisions have been submitted, show status instead of form
+  if (existingDecision) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-8 text-center">
+          <div className="text-6xl mb-4">✅</div>
+          <h2 className="text-4xl font-heading font-bold text-amber-900 mb-4">
+            Decisions Made
+          </h2>
+          {existingDecision.revealed ? (
+            <p className="text-xl text-amber-800 mb-6">
+              Your decisions have been revealed to all participants
+            </p>
+          ) : (
+            <p className="text-xl text-amber-800 mb-6">
+              Your decisions are recorded and await the admin's reveal
+            </p>
+          )}
+          <div className="text-amber-700">
+            You have fulfilled your duty as King of Kourion
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
