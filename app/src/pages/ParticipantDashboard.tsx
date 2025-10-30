@@ -754,6 +754,12 @@ export function ParticipantDashboard() {
         .select('*')
         .eq('run_id', runId)
 
+      console.log('🗳️ [loadClanVotes] Loading clan votes:', {
+        count: data?.length || 0,
+        revealed: data?.[0]?.revealed,
+        error: error?.message
+      })
+
       if (!error && data) {
         setClanVotes(data)
 
@@ -769,11 +775,21 @@ export function ParticipantDashboard() {
           const revealKey = `clan_allegiance_reveal_${runId}`
           const hasSeenReveal = localStorage.getItem(revealKey)
 
+          console.log('✅ Votes revealed!', {
+            hasSeenReveal,
+            willShowAnimation: !hasSeenReveal
+          })
+
           if (!hasSeenReveal) {
+            console.log('🎬 Triggering reveal animation!')
             setShowClanAllegianceReveal(true)
             localStorage.setItem(revealKey, 'true')
           }
+        } else {
+          console.log('⏳ Votes not yet revealed')
         }
+      } else if (error) {
+        console.error('❌ Error loading clan votes:', error)
       }
     }
 
@@ -791,11 +807,17 @@ export function ParticipantDashboard() {
           filter: `run_id=eq.${runId}`
         },
         (payload) => {
-          console.log('📊 Clan vote update:', payload)
+          console.log('📊 Clan vote real-time update received:', {
+            eventType: payload.eventType,
+            new: payload.new,
+            old: payload.old
+          })
           loadClanVotes() // Reload to check if revealed
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 Clan votes subscription status:', status)
+      })
 
     return () => {
       supabase.removeChannel(channel)
