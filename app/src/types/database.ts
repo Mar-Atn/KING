@@ -297,7 +297,8 @@ export interface KingDecision {
 export interface ClanVote {
   vote_id: string
   run_id: string
-  clan_id: string
+  role_id: string  // Individual role who voted
+  clan_id: string  // Clan they belong to (for aggregation)
   oath_of_allegiance: boolean | null
   initiate_actions: boolean | null
   voted_at: string | null

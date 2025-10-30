@@ -777,6 +777,7 @@ export function FacilitatorSimulation() {
                 <ClanAllegianceControls
                   runId={runId!}
                   clans={clans}
+                  roles={roles}
                 />
               </div>
             ) : null}

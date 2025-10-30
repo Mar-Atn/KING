@@ -1178,11 +1178,12 @@ export function ParticipantDashboard() {
       )}
 
       {/* Clan Allegiance Voting */}
-      {currentPhase && currentPhase.name.toLowerCase().includes('final') && currentPhase.name.toLowerCase().includes('decision') && clanData && (
+      {currentPhase && currentPhase.name.toLowerCase().includes('final') && currentPhase.name.toLowerCase().includes('decision') && clanData && role && (
         <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-b-4 border-amber-600">
           <div className="container mx-auto px-4 py-8">
             <ClanAllegianceVoting
               runId={runId!}
+              userRoleId={role.role_id}
               userClan={clanData}
               votingStarted={clanAllegianceVotingStarted}
               onVoteSuccess={() => {

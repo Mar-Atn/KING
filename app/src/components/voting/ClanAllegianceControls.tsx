@@ -6,14 +6,15 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import type { Clan, ClanVote } from '../../types/database'
+import type { Clan, ClanVote, Role } from '../../types/database'
 
 interface ClanAllegianceControlsProps {
   runId: string
   clans: Clan[]
+  roles: Role[]
 }
 
-export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsProps) {
+export function ClanAllegianceControls({ runId, clans, roles }: ClanAllegianceControlsProps) {
   const [loading, setLoading] = useState(true)
   const [revealing, setRevealing] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -24,7 +25,7 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
   const [votingActive, setVotingActive] = useState(false)
   const [votingStopped, setVotingStopped] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState(300) // 5 minutes default
-  const [manualVotes, setManualVotes] = useState<Record<string, { oath: boolean | null, action: boolean | null }>>({}) // clanId => {oath, action}
+  const [manualVotes, setManualVotes] = useState<Record<string, { oath: boolean | null, action: boolean | null }>>({}) // roleId => {oath, action}
 
   useEffect(() => {
     loadVotingState()
@@ -122,7 +123,7 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     setVotingStarted(true)
     setVotingActive(true)
     setTimeRemaining(300) // 5 minutes
-    alert('✅ Clan allegiance voting has started! All clans can now vote.')
+    alert('✅ Clan allegiance voting has started! All participants can now vote.')
   }
 
   const handleExtend = () => {
@@ -136,11 +137,11 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     setStopping(false)
   }
 
-  const handleManualVote = (clanId: string, field: 'oath' | 'action', value: boolean | null) => {
+  const handleManualVote = (roleId: string, field: 'oath' | 'action', value: boolean | null) => {
     setManualVotes(prev => ({
       ...prev,
-      [clanId]: {
-        ...prev[clanId],
+      [roleId]: {
+        ...prev[roleId],
         [field]: value
       }
     }))
@@ -153,11 +154,15 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
 
     setRevealing(true)
 
-    // First, insert manual votes for clans that didn't vote
-    for (const [clanId, manualVote] of Object.entries(manualVotes)) {
-      // Check if this clan already voted
-      const existing = votes.find(v => v.clan_id === clanId)
+    // First, insert manual votes for roles that didn't vote
+    for (const [roleId, manualVote] of Object.entries(manualVotes)) {
+      // Check if this role already voted
+      const existing = votes.find(v => v.role_id === roleId)
       if (existing) continue // Skip if already voted
+
+      // Find the role to get its clan_id
+      const role = roles.find(r => r.role_id === roleId)
+      if (!role || !role.clan_id) continue
 
       // Only insert if admin set both values
       if (manualVote.oath !== null && manualVote.action !== null) {
@@ -165,14 +170,15 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
           .from('clan_votes')
           .insert({
             run_id: runId,
-            clan_id: clanId,
+            role_id: roleId,
+            clan_id: role.clan_id,
             oath_of_allegiance: manualVote.oath,
             initiate_actions: manualVote.action,
             voted_at: new Date().toISOString()
           })
 
         if (error) {
-          console.error(`Error inserting manual vote for clan ${clanId}:`, error)
+          console.error(`Error inserting manual vote for role ${roleId}:`, error)
         }
       }
     }
@@ -201,12 +207,20 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
     alert('✅ Clan decisions revealed to all participants!')
   }
 
-  const getClanVote = (clanId: string): ClanVote | undefined => {
-    return votes.find(v => v.clan_id === clanId)
+  const getRoleVote = (roleId: string): ClanVote | undefined => {
+    return votes.find(v => v.role_id === roleId)
+  }
+
+  const getClanRoles = (clanId: string): Role[] => {
+    return roles.filter(r => r.clan_id === clanId && r.participant_type === 'human')
+  }
+
+  const getClanVotes = (clanId: string): ClanVote[] => {
+    return votes.filter(v => v.clan_id === clanId)
   }
 
   const getVotedCount = () => votes.length
-  const getTotalCount = () => clans.length
+  const getTotalCount = () => roles.filter(r => r.participant_type === 'human').length
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -241,7 +255,7 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
             {starting ? 'Starting...' : '▶️ Start Voting'}
           </button>
           <div className="mt-6 text-amber-700 text-sm">
-            When you start voting, all {clans.length} clans will be able to cast their votes
+            When you start voting, all {getTotalCount()} participants will be able to cast their votes
           </div>
         </div>
       </div>
@@ -316,7 +330,7 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
             <div className="flex items-center justify-between mb-2">
               <span className="font-semibold text-amber-900">Voting Progress</span>
               <span className="text-amber-800">
-                {getVotedCount()} / {getTotalCount()} clans voted
+                {getVotedCount()} / {getTotalCount()} roles voted
               </span>
             </div>
             <div className="w-full bg-amber-200 rounded-full h-4 overflow-hidden">
@@ -329,117 +343,169 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
         )}
       </div>
 
-      {/* Clan Voting Status */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Clan Voting Status with Individual Roles */}
+      <div className="space-y-6">
         {clans.map(clan => {
-          const vote = getClanVote(clan.clan_id)
-          const hasVoted = !!vote
+          const clanRoles = getClanRoles(clan.clan_id)
+          const clanVotes = getClanVotes(clan.clan_id)
+          const totalRoles = clanRoles.length
+          const totalVoted = clanVotes.length
+
+          // Calculate aggregate stats for oath
+          const oathYes = clanVotes.filter(v => v.oath_of_allegiance === true).length
+          const oathNo = clanVotes.filter(v => v.oath_of_allegiance === false).length
+
+          // Calculate aggregate stats for actions (only if clan has contingency plans)
+          const actionYes = clanVotes.filter(v => v.initiate_actions === true).length
+          const actionNo = clanVotes.filter(v => v.initiate_actions === false).length
 
           return (
-            <div
-              key={clan.clan_id}
-              className={`bg-white rounded-xl border-4 p-5 ${
-                hasVoted ? 'border-green-500' : 'border-amber-300'
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                {/* Clan Emblem */}
+            <div key={clan.clan_id} className="bg-white rounded-xl border-4 border-amber-400 p-6">
+              {/* Clan Header with Emblem and Aggregate Stats */}
+              <div className="flex items-start gap-4 mb-4 pb-4 border-b-2 border-amber-200">
                 {clan.emblem_url && (
                   <img
                     src={clan.emblem_url}
                     alt={clan.name}
-                    className="w-16 h-16 object-contain"
+                    className="w-20 h-20 object-contain"
                   />
                 )}
 
                 <div className="flex-1">
-                  {/* Clan Name */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <h4
-                      className="text-xl font-heading font-bold"
-                      style={{ color: clan.color_hex }}
-                    >
-                      {clan.name}
-                    </h4>
-                    {hasVoted && (
-                      <span className="text-green-600 text-2xl">✓</span>
-                    )}
-                  </div>
+                  <h4
+                    className="text-2xl font-heading font-bold mb-2"
+                    style={{ color: clan.color_hex }}
+                  >
+                    {clan.name}
+                  </h4>
 
-                  {/* Vote Status */}
-                  {!hasVoted ? (
-                    votingStopped && !revealed ? (
-                      // Manual vote entry for clans that didn't vote
-                      <div className="space-y-3">
-                        <div className="text-red-700 font-semibold text-sm mb-2">
-                          ❌ Did not vote - Manual entry required:
+                  {/* Aggregate Statistics */}
+                  <div className="space-y-1 text-sm">
+                    <div className="flex items-center gap-4">
+                      <span className="font-semibold text-neutral-700">Voting Progress:</span>
+                      <span className="text-amber-800">{totalVoted} / {totalRoles} voted</span>
+                    </div>
+
+                    {revealed && (
+                      <>
+                        <div className="flex items-center gap-4">
+                          <span className="font-semibold text-neutral-700">Oath of Allegiance:</span>
+                          <span className="text-green-700">{oathYes} Yes</span>
+                          <span className="text-red-700">{oathNo} No</span>
                         </div>
 
-                        {/* Oath dropdown */}
-                        <div>
-                          <label className="block text-xs text-neutral-600 mb-1">Oath of Allegiance:</label>
-                          <select
-                            value={manualVotes[clan.clan_id]?.oath === true ? 'true' : manualVotes[clan.clan_id]?.oath === false ? 'false' : ''}
-                            onChange={(e) => handleManualVote(clan.clan_id, 'oath', e.target.value === '' ? null : e.target.value === 'true')}
-                            className="w-full text-sm border-2 border-amber-300 rounded px-2 py-1"
-                          >
-                            <option value="">Select...</option>
-                            <option value="true">✅ Pledge Allegiance</option>
-                            <option value="false">❌ Refuse Allegiance</option>
-                          </select>
-                        </div>
-
-                        {/* Actions dropdown (only if clan has if_things_go_wrong) */}
                         {clan.if_things_go_wrong && (
-                          <div>
-                            <label className="block text-xs text-neutral-600 mb-1">Initiate Actions:</label>
-                            <select
-                              value={manualVotes[clan.clan_id]?.action === true ? 'true' : manualVotes[clan.clan_id]?.action === false ? 'false' : ''}
-                              onChange={(e) => handleManualVote(clan.clan_id, 'action', e.target.value === '' ? null : e.target.value === 'true')}
-                              className="w-full text-sm border-2 border-amber-300 rounded px-2 py-1"
-                            >
-                              <option value="">Select...</option>
-                              <option value="true">⚔️ Act Against King</option>
-                              <option value="false">🕊️ Vote for Peace</option>
-                            </select>
+                          <div className="flex items-center gap-4">
+                            <span className="font-semibold text-neutral-700">Initiate Actions:</span>
+                            <span className="text-red-700">{actionYes} Yes</span>
+                            <span className="text-green-700">{actionNo} No</span>
                           </div>
                         )}
-                      </div>
-                    ) : (
-                      <div className="text-amber-700 italic">Awaiting vote...</div>
-                    )
-                  ) : revealed ? (
-                    <div className="space-y-2">
-                      {/* Oath of Allegiance */}
-                      <div className={`p-3 rounded-lg ${
-                        vote.oath_of_allegiance
-                          ? 'bg-green-50 border-2 border-green-500'
-                          : 'bg-red-50 border-2 border-red-500'
-                      }`}>
-                        <div className="font-semibold text-sm mb-1">
-                          {vote.oath_of_allegiance ? '✅ Pledged Allegiance' : '❌ Refused Allegiance'}
-                        </div>
-                      </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-                      {/* Contingency Actions */}
-                      {clan.if_things_go_wrong && (
-                        <div className={`p-3 rounded-lg ${
-                          vote.initiate_actions
-                            ? 'bg-red-100 border-2 border-red-600'
-                            : 'bg-green-50 border-2 border-green-500'
-                        }`}>
-                          <div className="font-semibold text-sm">
-                            {vote.initiate_actions ? '⚔️ Vote to Act Against King' : '🕊️ Vote for Peace'}
+              {/* Individual Roles */}
+              <div className="space-y-3">
+                {clanRoles.map(role => {
+                  const roleVote = getRoleVote(role.role_id)
+                  const hasVoted = !!roleVote
+
+                  return (
+                    <div
+                      key={role.role_id}
+                      className={`border-2 rounded-lg p-3 ${
+                        hasVoted ? 'border-green-400 bg-green-50' : 'border-amber-300 bg-amber-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {/* Role Avatar */}
+                          {role.avatar_url && (
+                            <img
+                              src={role.avatar_url}
+                              alt={role.name}
+                              className="w-10 h-10 rounded-full object-cover border-2"
+                              style={{ borderColor: clan.color_hex }}
+                            />
+                          )}
+
+                          <div>
+                            <div className="font-semibold text-neutral-900">{role.name}</div>
+                            <div className="text-xs text-neutral-600">{role.title}</div>
                           </div>
                         </div>
-                      )}
+
+                        <div className="flex-1 ml-4">
+                          {!hasVoted ? (
+                            votingStopped && !revealed ? (
+                              // Manual vote entry for roles that didn't vote
+                              <div className="flex gap-3 items-center">
+                                <span className="text-red-700 font-semibold text-xs whitespace-nowrap">
+                                  Manual entry:
+                                </span>
+
+                                {/* Oath dropdown */}
+                                <select
+                                  value={manualVotes[role.role_id]?.oath === true ? 'true' : manualVotes[role.role_id]?.oath === false ? 'false' : ''}
+                                  onChange={(e) => handleManualVote(role.role_id, 'oath', e.target.value === '' ? null : e.target.value === 'true')}
+                                  className="text-xs border-2 border-amber-300 rounded px-2 py-1 flex-1"
+                                >
+                                  <option value="">Oath?</option>
+                                  <option value="true">✅ Pledge</option>
+                                  <option value="false">❌ Refuse</option>
+                                </select>
+
+                                {/* Actions dropdown (only if clan has contingency) */}
+                                {clan.if_things_go_wrong && (
+                                  <select
+                                    value={manualVotes[role.role_id]?.action === true ? 'true' : manualVotes[role.role_id]?.action === false ? 'false' : ''}
+                                    onChange={(e) => handleManualVote(role.role_id, 'action', e.target.value === '' ? null : e.target.value === 'true')}
+                                    className="text-xs border-2 border-amber-300 rounded px-2 py-1 flex-1"
+                                  >
+                                    <option value="">Action?</option>
+                                    <option value="true">⚔️ Act</option>
+                                    <option value="false">🕊️ Peace</option>
+                                  </select>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-amber-700 italic text-sm text-right">Awaiting vote...</div>
+                            )
+                          ) : revealed ? (
+                            <div className="flex gap-2 justify-end">
+                              {/* Oath result */}
+                              <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                                roleVote.oath_of_allegiance
+                                  ? 'bg-green-200 text-green-900'
+                                  : 'bg-red-200 text-red-900'
+                              }`}>
+                                {roleVote.oath_of_allegiance ? '✅ Pledged' : '❌ Refused'}
+                              </span>
+
+                              {/* Action result (only if clan has contingency) */}
+                              {clan.if_things_go_wrong && (
+                                <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                                  roleVote.initiate_actions
+                                    ? 'bg-red-200 text-red-900'
+                                    : 'bg-green-200 text-green-900'
+                                }`}>
+                                  {roleVote.initiate_actions ? '⚔️ Act' : '🕊️ Peace'}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-green-700 font-semibold text-sm text-right">
+                              ✓ Voted
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="text-green-700 font-semibold">
-                      ✓ Vote Submitted
-                    </div>
-                  )}
-                </div>
+                  )
+                })}
               </div>
             </div>
           )
@@ -447,13 +513,13 @@ export function ClanAllegianceControls({ runId, clans }: ClanAllegianceControlsP
       </div>
 
       {/* Warning if not all voted */}
-      {!revealed && votes.length < clans.length && (
+      {!revealed && votes.length < getTotalCount() && (
         <div className="bg-amber-100 border-2 border-amber-500 rounded-lg p-4 text-center">
           <div className="text-amber-900 font-semibold">
-            ⚠️ Not all clans have voted yet
+            ⚠️ Not all participants have voted yet
           </div>
           <div className="text-amber-700 text-sm mt-1">
-            You can reveal results now, or wait for all clans to vote
+            You can reveal results now, or wait for all participants to vote
           </div>
         </div>
       )}

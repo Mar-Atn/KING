@@ -12,12 +12,13 @@ import type { Clan, ClanVote } from '../../types/database'
 
 interface ClanAllegianceVotingProps {
   runId: string
+  userRoleId: string
   userClan: Clan
   votingStarted: boolean
   onVoteSuccess: () => void
 }
 
-export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuccess }: ClanAllegianceVotingProps) {
+export function ClanAllegianceVoting({ runId, userRoleId, userClan, votingStarted, onVoteSuccess }: ClanAllegianceVotingProps) {
   const [loading, setLoading] = useState(false)
   const [existingVote, setExistingVote] = useState<ClanVote | null>(null)
   const [oathVote, setOathVote] = useState<boolean | null>(null)
@@ -28,14 +29,14 @@ export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuc
 
     // Subscribe to real-time updates
     const channel = supabase
-      .channel(`clan_votes:${runId}`)
+      .channel(`clan_votes:${runId}:${userRoleId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'clan_votes',
-          filter: `clan_id=eq.${userClan.clan_id}`
+          filter: `role_id=eq.${userRoleId}`
         },
         () => {
           loadExistingVote()
@@ -46,7 +47,7 @@ export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuc
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [runId, userClan.clan_id])
+  }, [runId, userRoleId])
 
   // Show "waiting for voting to start" message if voting hasn't begun
   if (!votingStarted && !existingVote) {
@@ -73,7 +74,7 @@ export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuc
       .from('clan_votes')
       .select('*')
       .eq('run_id', runId)
-      .eq('clan_id', userClan.clan_id)
+      .eq('role_id', userRoleId)
       .single()
 
     if (data && !error) {
@@ -95,6 +96,7 @@ export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuc
 
     const voteData = {
       run_id: runId,
+      role_id: userRoleId,
       clan_id: userClan.clan_id,
       oath_of_allegiance: oathVote,
       initiate_actions: actionVote,
@@ -126,7 +128,7 @@ export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuc
       return
     }
 
-    alert('✅ Your clan\'s vote has been recorded!')
+    alert('✅ Your vote has been recorded!')
     onVoteSuccess()
   }
 
@@ -137,10 +139,10 @@ export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuc
         <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-8 text-center">
           <div className="text-6xl mb-4">✅</div>
           <h2 className="text-4xl font-heading font-bold text-amber-900 mb-4">
-            Your Clan Has Voted
+            You Have Voted
           </h2>
           <p className="text-xl text-amber-800 mb-6" style={{ color: userClan.color_hex }}>
-            {userClan.name} has cast its vote
+            {userClan.name}
           </p>
           <div className="text-amber-700">
             Awaiting the reveal of all clan decisions
@@ -266,7 +268,7 @@ export function ClanAllegianceVoting({ runId, userClan, votingStarted, onVoteSuc
             disabled={loading || oathVote === null || actionVote === null}
             className="px-12 py-4 bg-amber-600 text-white text-xl font-heading font-bold rounded-lg hover:bg-amber-700 disabled:bg-amber-300 transition-colors shadow-lg"
           >
-            {loading ? 'Submitting...' : 'Cast Your Clan\'s Vote'}
+            {loading ? 'Submitting...' : 'Cast Your Vote'}
           </button>
         </div>
       </form>
