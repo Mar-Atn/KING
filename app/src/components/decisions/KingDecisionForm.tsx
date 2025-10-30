@@ -11,12 +11,13 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import type { Role } from '../../types/database'
+import type { Role, Clan } from '../../types/database'
 
 interface KingDecisionFormProps {
   runId: string
   kingRoleId: string
   allRoles: Role[]
+  clans: Clan[]
   onSubmitSuccess: () => void
 }
 
@@ -42,7 +43,6 @@ interface DecisionFormData {
 
   // Free text
   other_decisions: string
-  final_speech: string
 }
 
 const TAX_OPTIONS = [
@@ -69,7 +69,7 @@ const ALLIANCE_OPTIONS = [
 
 const WAR_TARGETS = ['Salamis', 'Kition', 'Egypt', 'Persia', 'Assyria']
 
-export function KingDecisionForm({ runId, kingRoleId, allRoles, onSubmitSuccess }: KingDecisionFormProps) {
+export function KingDecisionForm({ runId, kingRoleId, allRoles, clans, onSubmitSuccess }: KingDecisionFormProps) {
   const [loading, setLoading] = useState(false)
   const [existingDecision, setExistingDecision] = useState<any>(null)
   const [formData, setFormData] = useState<DecisionFormData>({
@@ -84,8 +84,7 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, onSubmitSuccess 
     senior_judge: '',
     alliance: 'none',
     war_declarations: [],
-    other_decisions: '',
-    final_speech: ''
+    other_decisions: ''
   })
 
   // Load existing decision if any
@@ -118,8 +117,7 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, onSubmitSuccess 
           senior_judge: appointments?.senior_judge || '',
           alliance: intl?.alliance || 'none',
           war_declarations: intl?.war_declarations || [],
-          other_decisions: data.other_decisions || '',
-          final_speech: data.final_speech_transcript || ''
+          other_decisions: data.other_decisions || ''
         })
       }
     }
@@ -172,7 +170,7 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, onSubmitSuccess 
       appointments,
       international_affairs,
       other_decisions: formData.other_decisions || null,
-      final_speech_transcript: formData.final_speech || null
+      final_speech_transcript: null
     }
 
     let error
@@ -206,6 +204,12 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, onSubmitSuccess 
 
   // Get eligible roles for appointments (excluding the King)
   const eligibleRoles = allRoles.filter(r => r.role_id !== kingRoleId)
+
+  // Helper to get clan name for a role
+  const getClanName = (role: Role): string => {
+    const clan = clans.find(c => c.clan_id === role.clan_id)
+    return clan ? clan.name : 'Unknown Clan'
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -374,7 +378,7 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, onSubmitSuccess 
                 <option value="">-- Select Advisor --</option>
                 {eligibleRoles.map(role => (
                   <option key={role.role_id} value={role.role_id}>
-                    {role.name} ({role.title})
+                    {role.name} ({role.title}) - {getClanName(role)}
                   </option>
                 ))}
               </select>
@@ -392,7 +396,7 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, onSubmitSuccess 
                 <option value="">-- Select Judge --</option>
                 {eligibleRoles.map(role => (
                   <option key={role.role_id} value={role.role_id}>
-                    {role.name} ({role.title})
+                    {role.name} ({role.title}) - {getClanName(role)}
                   </option>
                 ))}
               </select>
@@ -459,24 +463,6 @@ export function KingDecisionForm({ runId, kingRoleId, allRoles, onSubmitSuccess 
             rows={4}
             placeholder="Enter any other decisions, policies, or royal decrees..."
             className="w-full px-4 py-3 border-2 border-amber-300 rounded-lg focus:outline-none focus:border-amber-600 bg-amber-50 resize-none"
-          />
-        </div>
-
-        {/* Final Speech */}
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-4 border-amber-600 p-6">
-          <h3 className="text-2xl font-heading font-bold text-amber-900 mb-1 flex items-center gap-2">
-            <span>📜</span>
-            <span>Final Speech to Your People</span>
-          </h3>
-          <p className="text-amber-700 mb-4">Address your citizens and announce your vision for Kourion</p>
-
-          <textarea
-            value={formData.final_speech}
-            onChange={(e) => setFormData({ ...formData, final_speech: e.target.value })}
-            rows={8}
-            placeholder="People of Kourion, today marks a new chapter in our glorious history..."
-            className="w-full px-4 py-3 border-2 border-amber-400 rounded-lg focus:outline-none focus:border-amber-600 bg-white resize-none font-serif text-lg"
-            required
           />
         </div>
 

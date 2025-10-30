@@ -1082,6 +1082,7 @@ export function ParticipantDashboard() {
               runId={runId!}
               kingRoleId={role.role_id}
               allRoles={allRoles}
+              clans={allClans}
               onSubmitSuccess={() => {
                 alert('✅ Your royal decree has been recorded and sent to the admin for review!')
               }}
