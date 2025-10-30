@@ -22,10 +22,12 @@ import { ResultsDisplay } from '../components/voting/ResultsDisplay'
 import { ClanNominationsReveal } from '../components/voting/ClanNominationsReveal'
 import { ElectionWinnerReveal } from '../components/voting/ElectionWinnerReveal'
 import { ElectionRevealAnimation } from '../components/voting/ElectionRevealAnimation'
+import { ClanAllegianceVoting } from '../components/voting/ClanAllegianceVoting'
+import { ClanAllegianceReveal } from '../components/voting/ClanAllegianceReveal'
 import { useVoting } from '../hooks/useVoting'
 import { KingDecisionForm } from '../components/decisions/KingDecisionForm'
 import { KingDecisionReveal } from '../components/decisions/KingDecisionReveal'
-import type { Role, Clan, Phase, SimRun, VoteResult, KingDecision } from '../types/database'
+import type { Role, Clan, Phase, SimRun, VoteResult, KingDecision, ClanVote } from '../types/database'
 
 type Tab = 'role' | 'clan' | 'process' | 'materials'
 
@@ -113,6 +115,10 @@ export function ParticipantDashboard() {
   const [isKing, setIsKing] = useState(false)
   const [kingDecision, setKingDecision] = useState<KingDecision | null>(null)
   const [showKingDecisionReveal, setShowKingDecisionReveal] = useState(false)
+
+  // Clan allegiance state
+  const [clanVotes, setClanVotes] = useState<ClanVote[]>([])
+  const [showClanAllegianceReveal, setShowClanAllegianceReveal] = useState(false)
 
   // Load all data (run only once on mount)
   useEffect(() => {
@@ -731,6 +737,57 @@ export function ParticipantDashboard() {
     }
   }, [runId])
 
+  // Subscribe to clan allegiance votes (for reveals)
+  useEffect(() => {
+    if (!runId) return
+
+    const loadClanVotes = async () => {
+      const { data, error} = await supabase
+        .from('clan_votes')
+        .select('*')
+        .eq('run_id', runId)
+
+      if (!error && data) {
+        setClanVotes(data)
+
+        // Auto-show reveal if votes are revealed and user hasn't seen it yet
+        if (data.length > 0 && data[0].revealed) {
+          const revealKey = `clan_allegiance_reveal_${runId}`
+          const hasSeenReveal = localStorage.getItem(revealKey)
+
+          if (!hasSeenReveal) {
+            setShowClanAllegianceReveal(true)
+            localStorage.setItem(revealKey, 'true')
+          }
+        }
+      }
+    }
+
+    loadClanVotes()
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel(`clan_votes_participant:${runId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'clan_votes',
+          filter: `run_id=eq.${runId}`
+        },
+        (payload) => {
+          console.log('📊 Clan vote update:', payload)
+          loadClanVotes() // Reload to check if revealed
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [runId])
+
   // Show loading screen while auth is loading (prevents premature redirects)
   if (authLoading) {
     console.log('⏳ [ParticipantDashboard render] Auth is loading, showing spinner...')
@@ -1107,6 +1164,21 @@ export function ParticipantDashboard() {
               clans={allClans}
               onSubmitSuccess={() => {
                 // Success message handled in KingDecisionForm component
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Clan Allegiance Voting */}
+      {currentPhase && currentPhase.name.toLowerCase().includes('clan') && currentPhase.name.toLowerCase().includes('allegiance') && clanData && (
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-b-4 border-amber-600">
+          <div className="container mx-auto px-4 py-8">
+            <ClanAllegianceVoting
+              runId={runId!}
+              userClan={clanData}
+              onVoteSuccess={() => {
+                // Success handled in component
               }}
             />
           </div>
@@ -1700,6 +1772,15 @@ export function ParticipantDashboard() {
           allRoles={allRoles}
           clans={allClans}
           onClose={() => setShowKingDecisionReveal(false)}
+        />
+      )}
+
+      {/* Clan Allegiance Reveal */}
+      {showClanAllegianceReveal && clanVotes.length > 0 && (
+        <ClanAllegianceReveal
+          clans={allClans}
+          votes={clanVotes}
+          onComplete={() => setShowClanAllegianceReveal(false)}
         />
       )}
     </div>

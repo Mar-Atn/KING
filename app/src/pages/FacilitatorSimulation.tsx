@@ -7,6 +7,7 @@ import { PhaseControls } from '../components/PhaseControls'
 import { VotingControls } from '../components/voting/VotingControls'
 import { ClanNominationsControls } from '../components/voting/ClanNominationsControls'
 import { ElectionRoundControls } from '../components/voting/ElectionRoundControls'
+import { ClanAllegianceControls } from '../components/voting/ClanAllegianceControls'
 import { KingDecisionReview } from '../components/decisions/KingDecisionReview'
 import type { SimRun, Clan, Role } from '../types/database'
 
@@ -755,6 +756,16 @@ export function FacilitatorSimulation() {
                 allRoles={roles}
                 clans={clans}
               />
+            ) : null}
+
+            {/* Clan Allegiance Voting (Final Phase) */}
+            {currentPhase && currentPhase.name.toLowerCase().includes('clan') && currentPhase.name.toLowerCase().includes('allegiance') ? (
+              <div className="mb-6">
+                <ClanAllegianceControls
+                  runId={runId!}
+                  clans={clans}
+                />
+              </div>
             ) : null}
 
             <PhaseControls runId={runId!} />
