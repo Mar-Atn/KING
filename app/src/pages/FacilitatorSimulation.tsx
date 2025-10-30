@@ -61,6 +61,7 @@ export function FacilitatorSimulation() {
       '• Delete all votes for this phase\n' +
       '• Delete all voting sessions\n' +
       '• Delete King\'s Decisions (if any)\n' +
+      '• Delete Clan Allegiance Votes (if any)\n' +
       '• Reset the phase timer\n' +
       '• Reset the phase to fresh state\n\n' +
       'Continue?'
@@ -105,6 +106,18 @@ export function FacilitatorSimulation() {
       await supabase
         .from('king_decisions')
         .delete()
+        .eq('run_id', runId)
+
+      // Delete Clan Allegiance Votes for this run
+      await supabase
+        .from('clan_votes')
+        .delete()
+        .eq('run_id', runId)
+
+      // Reset clan allegiance voting state
+      await supabase
+        .from('sim_runs')
+        .update({ clan_allegiance_voting_started_at: null })
         .eq('run_id', runId)
 
       // Reset the phase timer and status
