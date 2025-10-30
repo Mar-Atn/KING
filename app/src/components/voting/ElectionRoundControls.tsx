@@ -46,6 +46,9 @@ export function ElectionRoundControls({
   const [totalVotesCast, setTotalVotesCast] = useState(0)
   const [totalParticipants, setTotalParticipants] = useState(0)
   const [nonVoters, setNonVoters] = useState<Role[]>([])
+  const [runoffCandidates, setRunoffCandidates] = useState<Array<{role_id: string; name: string; vote_count: number; percentage: number}>>([])
+  const [selectedRunoffCandidates, setSelectedRunoffCandidates] = useState<Set<string>>(new Set())
+  const [runoffConfirmed, setRunoffConfirmed] = useState(false)
 
   // Calculate total participants (human roles only)
   useEffect(() => {
@@ -457,6 +460,83 @@ export function ElectionRoundControls({
     await fetchSessions()
   }
 
+  // Load runoff candidates from vote results when announced
+  useEffect(() => {
+    const loadRunoffCandidates = async () => {
+      if (!announced || !session) return
+
+      const { data: result, error } = await supabase
+        .from('vote_results')
+        .select('results_data, confirmed_runoff_candidates')
+        .eq('session_id', session.session_id)
+        .single()
+
+      if (error) {
+        console.error('Error loading results:', error)
+        return
+      }
+
+      if (result?.results_data) {
+        const resultsData = result.results_data as any
+        if (resultsData.runoff_candidates && resultsData.runoff_candidates.length > 0) {
+          setRunoffCandidates(resultsData.runoff_candidates)
+
+          // Initialize selected candidates with all runoff candidates by default
+          if (result.confirmed_runoff_candidates) {
+            setSelectedRunoffCandidates(new Set(result.confirmed_runoff_candidates as string[]))
+            setRunoffConfirmed(true)
+          } else {
+            setSelectedRunoffCandidates(new Set(resultsData.runoff_candidates.map((c: any) => c.role_id)))
+          }
+        }
+      }
+    }
+
+    loadRunoffCandidates()
+  }, [announced, session])
+
+  const toggleRunoffCandidate = (roleId: string) => {
+    if (runoffConfirmed) return // Can't change after confirmation
+
+    setSelectedRunoffCandidates(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(roleId)) {
+        newSet.delete(roleId)
+      } else {
+        newSet.add(roleId)
+      }
+      return newSet
+    })
+  }
+
+  const confirmRunoffCandidates = async () => {
+    if (!session || selectedRunoffCandidates.size === 0) {
+      alert('Please select at least one candidate for the next round')
+      return
+    }
+
+    setLoading(true)
+
+    // Update vote_results with confirmed runoff candidates
+    const { error } = await supabase
+      .from('vote_results')
+      .update({
+        confirmed_runoff_candidates: Array.from(selectedRunoffCandidates)
+      })
+      .eq('session_id', session.session_id)
+
+    setLoading(false)
+
+    if (error) {
+      console.error('Error confirming runoff candidates:', error)
+      alert('Failed to confirm candidates: ' + error.message)
+      return
+    }
+
+    setRunoffConfirmed(true)
+    console.log('Runoff candidates confirmed:', Array.from(selectedRunoffCandidates))
+  }
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -740,6 +820,119 @@ export function ElectionRoundControls({
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* Runoff Candidates Management - Show after announcement if there are runoff candidates */}
+      {announced && runoffCandidates.length > 0 && (
+        <div className="mt-6 p-6 bg-amber-50 border-2 border-amber-400 rounded-lg">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-heading text-xl text-amber-900 font-bold mb-1">
+                {runoffConfirmed ? '✓ Second Round Participants Confirmed' : 'Manage Second Round Participants'}
+              </h3>
+              <p className="text-sm text-amber-800">
+                {runoffConfirmed
+                  ? `${selectedRunoffCandidates.size} candidates will advance to the next voting round`
+                  : 'Select which candidates will advance to the next voting round'}
+              </p>
+            </div>
+            {!runoffConfirmed && (
+              <button
+                onClick={confirmRunoffCandidates}
+                disabled={loading || selectedRunoffCandidates.size === 0}
+                className="px-6 py-3 bg-success text-white rounded-lg hover:bg-opacity-90 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Eye className="w-5 h-5" />
+                Confirm Second Round Participants
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {runoffCandidates.map(candidate => {
+              const candidateRole = allRoles.find(r => r.role_id === candidate.role_id)
+              const candidateClan = candidateRole ? clans.find(c => c.clan_id === candidateRole.clan_id) : null
+              const isSelected = selectedRunoffCandidates.has(candidate.role_id)
+
+              return (
+                <div
+                  key={candidate.role_id}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    isSelected
+                      ? 'bg-white border-success'
+                      : 'bg-neutral-100 border-neutral-300 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 flex-1">
+                      {/* Checkbox */}
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleRunoffCandidate(candidate.role_id)}
+                        disabled={runoffConfirmed}
+                        className="w-5 h-5 cursor-pointer disabled:cursor-not-allowed"
+                      />
+
+                      {/* Candidate Info */}
+                      <div className="flex items-center gap-3">
+                        {candidateRole && (
+                          <img
+                            src={candidateRole.avatar_url || '/placeholder-avatar.png'}
+                            alt={candidateRole.name}
+                            className="w-12 h-12 rounded-full object-cover border-2"
+                            style={{ borderColor: candidateClan?.color_hex || '#8B7355' }}
+                          />
+                        )}
+                        {candidateClan?.emblem_url && (
+                          <img
+                            src={candidateClan.emblem_url}
+                            alt={candidateClan.name}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        )}
+                      </div>
+
+                      <div className="flex-1">
+                        <div className="font-semibold text-neutral-900 mb-1">
+                          {candidate.name}
+                          {isSelected && ' ✓'}
+                        </div>
+                        <div className="text-sm text-neutral-600 flex items-center gap-2">
+                          {candidateRole?.position}
+                          {candidateClan && (
+                            <>
+                              <span>•</span>
+                              <span style={{ color: candidateClan.color_hex }}>{candidateClan.name}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Vote Count */}
+                    <div className="text-right">
+                      <div className="text-xl font-bold text-neutral-900">
+                        {candidate.vote_count} votes
+                      </div>
+                      <div className="text-sm text-neutral-600">
+                        {candidate.percentage}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {!runoffConfirmed && selectedRunoffCandidates.size > 0 && (
+            <div className="mt-4 p-3 bg-amber-100 rounded-lg border border-amber-300">
+              <div className="text-sm text-amber-900">
+                <strong>{selectedRunoffCandidates.size} candidates selected</strong> for the next round. Click "Confirm" to finalize.
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
