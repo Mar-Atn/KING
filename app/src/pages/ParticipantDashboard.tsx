@@ -612,7 +612,7 @@ export function ParticipantDashboard() {
     fetchAnnouncedResults()
   }, [sessions, role, allClans, allRoles, runId])
 
-  // Check if current user is the elected King (from Vote 2 results)
+  // Check if current user is the elected King (from Vote 2 results) with real-time updates
   useEffect(() => {
     if (!role || !runId) return
 
@@ -641,7 +641,29 @@ export function ParticipantDashboard() {
       }
     }
 
+    // Check on mount
     checkIfKing()
+
+    // Subscribe to vote_results changes to detect when Vote 2 is announced
+    const voteResultsChannel = supabase
+      .channel(`vote_results:${runId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'vote_results',
+        },
+        (payload) => {
+          console.log('📊 Vote results updated, re-checking King status:', payload)
+          checkIfKing()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(voteResultsChannel)
+    }
   }, [role, runId])
 
   // Subscribe to King decisions (for reveals)

@@ -162,7 +162,7 @@ export function KingDecisionReview({ runId, kingRole, allRoles, clans }: KingDec
 
           <div>
             {decision.revealed ? (
-              <div className="px-6 py-3 bg-green-600 text-white rounded-lg font-bold">
+              <div className="px-6 py-3 bg-amber-100 text-amber-900 border-4 border-amber-600 rounded-lg font-bold">
                 ✅ Revealed to All
               </div>
             ) : (
