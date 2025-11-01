@@ -683,12 +683,17 @@ export function ParticipantDashboard() {
   useEffect(() => {
     if (!runId) return
 
+    console.log('👑 [King Decision Subscription] Setting up for runId:', runId)
+
     const loadKingDecision = async () => {
+      console.log('👑 [loadKingDecision] Loading decision...')
       const { data, error } = await supabase
         .from('king_decisions')
         .select('*')
         .eq('run_id', runId)
         .single()
+
+      console.log('👑 [loadKingDecision] Result:', { data, error: error?.message })
 
       if (!error && data) {
         setKingDecision(data)
@@ -698,10 +703,18 @@ export function ParticipantDashboard() {
           const revealKey = `king_decision_reveal_${runId}`
           const hasSeenReveal = localStorage.getItem(revealKey)
 
+          console.log('👑 [loadKingDecision] Decision is revealed!', {
+            hasSeenReveal,
+            willShowReveal: !hasSeenReveal
+          })
+
           if (!hasSeenReveal) {
+            console.log('🎬 [loadKingDecision] Triggering King Decision reveal!')
             setShowKingDecisionReveal(true)
             localStorage.setItem(revealKey, 'true')
           }
+        } else {
+          console.log('⏳ [loadKingDecision] Decision not yet revealed')
         }
       }
     }
@@ -720,7 +733,10 @@ export function ParticipantDashboard() {
           filter: `run_id=eq.${runId}`
         },
         (payload) => {
-          console.log('👑 King decision update:', payload)
+          console.log('👑 [Real-time] King decision update received:', {
+            eventType: payload.eventType,
+            revealed: (payload.new as any)?.revealed
+          })
           const decision = payload.new as KingDecision
 
           setKingDecision(decision)
@@ -730,16 +746,25 @@ export function ParticipantDashboard() {
             const revealKey = `king_decision_reveal_${runId}`
             const hasSeenReveal = localStorage.getItem(revealKey)
 
+            console.log('👑 [Real-time] Decision revealed!', {
+              hasSeenReveal,
+              willShowReveal: !hasSeenReveal
+            })
+
             if (!hasSeenReveal) {
+              console.log('🎬 [Real-time] Triggering King Decision reveal!')
               setShowKingDecisionReveal(true)
               localStorage.setItem(revealKey, 'true')
             }
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 [King Decision Subscription] Status:', status)
+      })
 
     return () => {
+      console.log('👑 [King Decision Subscription] Cleaning up')
       supabase.removeChannel(channel)
     }
   }, [runId])
