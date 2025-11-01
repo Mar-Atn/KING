@@ -681,7 +681,11 @@ export function ParticipantDashboard() {
 
   // Subscribe to King decisions (for reveals)
   useEffect(() => {
-    if (!runId) return
+    console.log('👑 [useEffect] King Decision subscription called, runId:', runId)
+    if (!runId) {
+      console.log('👑 [useEffect] Exiting early - no runId')
+      return
+    }
 
     console.log('👑 [King Decision Subscription] Setting up for runId:', runId)
 
